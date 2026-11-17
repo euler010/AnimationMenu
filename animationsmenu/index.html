@@ -79,6 +79,7 @@ const ROW_SPACING=50;  /* pixels from one link to the next, top to bottom, when 
 const COL_GAP=48;      /* pixels between columns */
 const PROJ_FIRST=4;             /* first projectile within this many seconds */
 const PROJ_MIN=10,PROJ_MAX=15;   /* seconds between projectiles after that */
+const SPAWN_MIN=1.2,SPAWN_MAX=2.2; /* seconds between new background sketches (smaller = more on the page) */
 const START_LINED_UP=true;       /* links start lined up; the button lets them drift */
 const HOLD=3;         /* seconds the links stay lined up before drifting */
 /* ================================================================ */
@@ -294,15 +295,16 @@ const WEIGHTS=[['pendulum',1.3],['spring',1.3],['orbit',1.3],['wave',1.3],['vect
 WEIGHTS.unshift(['equation',5]);
 const WSUM=WEIGHTS.reduce((a,b)=>a+b[1],0);
 function pickKind(){let r=Math.random()*WSUM;for(const [k,w] of WEIGHTS){if((r-=w)<=0)return k}return 'equation'}
-let gizmos=[],nextSpawn=4,nextProj=rnd(1,PROJ_FIRST);
-/* Already on screen when the page opens: two sketches (different kinds) and one equation */
+let gizmos=[],nextSpawn=1.5,nextProj=rnd(1,PROJ_FIRST);
+/* Already on screen when the page opens: five sketches (different kinds) and two equations.
+   Their starting ages are spread out so they fade away one at a time, not all together */
 function initialGizmos(){
  const kinds=['projectile','pendulum','spring','orbit','wave','vectors','incline'].sort(()=>Math.random()-0.5);
  const sk=kinds.filter(k=>k!=='projectile');
- spawn(sk[0],rnd(1.5,3),true);spawn(sk[1],rnd(1.5,3),true);spawn(sk[2],rnd(1.5,3),true);spawn('equation',rnd(1.5,3),true);
+ for(let i=0;i<5;i++)spawn(sk[i],1.5+i*1.7+rnd(0,1),true);spawn('equation',rnd(1.5,3),true);spawn('equation',rnd(5,7),true);
 }
 function spawn(force,age0,noCap){
- const maxG=W<520?2:W<900?3:5;
+ const maxG=W<520?3:W<900?5:8;
  let kind=force||pickKind();
  if(!noCap&&kind!=='projectile'&&gizmos.filter(g=>!g.solo).length>=maxG)return;
  const g=KINDS[kind]();g.kind=kind;g.age=age0||0;g.col=pick(COLS);
@@ -334,7 +336,7 @@ document.addEventListener('visibilitychange',start);
 function frame(now){
  if(!visible||document.hidden){running=false;return}
  const dt=Math.min(0.05,(now-last)/1000)*SPD;last=now;T+=dt;
- nextSpawn-=dt;if(nextSpawn<=0){spawn();nextSpawn=rnd(2,4)}
+ nextSpawn-=dt;if(nextSpawn<=0){spawn();nextSpawn=rnd(SPAWN_MIN,SPAWN_MAX)}
  nextProj-=dt;if(nextProj<=0){spawn('projectile');nextProj=rnd(PROJ_MIN,PROJ_MAX)}
  ctx.clearRect(0,0,W,H);drawGizmos(dt);moveLinks(dt);
  requestAnimationFrame(frame);
