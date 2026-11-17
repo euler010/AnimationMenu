@@ -107,7 +107,10 @@ function homes(){
  const {rows,cw,total}=L;
  const rowH=Math.max(ROWMIN,Math.min(ROW_SPACING,availH/rows));
  let x=Math.max(8,(W-total)/2);const xs=cw.map(w=>{const v=x;x+=w+GAP;return v});
- const y0=Math.max(54,(H-rows*rowH)/2);
+ /* Vertical placement: the middle of the block sits one third of the way down the box. A block too tall for that keeps its
+    top margin and grows downward, so a list that fills the box ends up centered top to bottom */
+ const TOP=54,BOTTOM=36,blockH=(rows-1)*rowH+(items[0]?items[0].h:0);
+ const y0=Math.max(TOP,Math.min(H/3-blockH/2,H-BOTTOM-blockH));
  items.forEach((it,i)=>{const c=Math.floor(i/rows),r=i%rows;it.hx=xs[c];it.hy=y0+r*rowH});
 }
 function size(){
