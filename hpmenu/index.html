@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Honors Physics Menu</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@500&family=STIX+Two+Text:ital@1&display=swap">
+<style>
+/* Layout: a white "chalkboard in reverse" — link titles are the foreground objects drifting in a box; faint physics sketches live on a canvas behind them. Single deliberate light look. */
+:root{
+  --paper:#ffffff;
+  --ink:#1d2340;
+  --ink-soft:#5a6082;
+  --accent:#5b54c9;
+  --line:rgba(29,35,64,0.16);
+  --hover:#f2f1fb;
+  --font-link:'Nunito','Segoe UI',system-ui,sans-serif;
+  --font-math:'STIX Two Text','Cambria Math','Times New Roman',serif;
+  color-scheme:light;
+}
+html,body{height:100%}
+body{background:var(--paper);color:var(--ink);font-family:var(--font-link);margin:0;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px;box-sizing:border-box}
+#stage{position:relative;height:100%;min-height:560px;overflow:hidden;background:var(--paper)}
+#cv{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#layer{position:absolute;inset:0}
+.lk{position:absolute;left:0;top:0;display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;
+  color:var(--ink);text-decoration:none;font-size:18px;font-weight:500;white-space:nowrap;will-change:transform;
+  text-shadow:0 0 4px var(--paper),0 0 8px var(--paper),0 0 2px var(--paper);border:0.5px solid transparent;transition:background .2s,border-color .2s}
+.lk svg{flex:none;opacity:0.8;transition:transform .6s}
+.lk:hover,.lk:focus-visible{background:var(--paper);border-color:var(--line);outline:none;box-shadow:0 4px 14px rgba(40,40,110,0.10)}
+.lk:hover svg,.lk:focus-visible svg{transform:rotate(45deg) scale(1.15)}
+.lk:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#tidy{position:absolute;top:10px;right:10px;z-index:5;display:flex;align-items:center;gap:6px;background:var(--paper);color:var(--ink);
+  border:0.5px solid var(--line);border-radius:8px;padding:7px 12px;font:inherit;font-size:15px;cursor:pointer}
+#tidy:hover{background:var(--hover)}
+#tidy:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+</style>
+</head>
+<body>
+<div id="stage">
+  <canvas id="cv" aria-hidden="true"></canvas>
+  <nav id="layer" aria-label="Honors Physics reviews"></nav>
+  <button id="tidy" aria-pressed="true">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h7M4 12h7M4 18h7M14 6h6M14 12h6M14 18h6"/></svg>
+    <span>Align</span>
+  </button>
+</div>
+
+<script>
+/* ===== Edit links here: [title, page name after /honors-physics/ OR a full web address] ===== */
+const BASE="https://www.smithphysics.com/honors-physics/";
+const LINKS=[
+ ["Honors Physics Kinematics Review","kinematics-review"],
+ ["Position-Time and Velocity-Time Graphs Review","motion-graphs-review"],
+ ["Honors Physics Vector Review","vector-review-hp"],
+ ["Honors Physics Unit 2 Quiz 1 Review","honors-physics-unit-2-quiz-1-review"],
+ ["Honors Physics Unit 2 Test 1 Review","honors-physics-unit-2-test-1-review"]];
+const SORT_AZ=false;   /* false = keep the order above (course order); true = alphabetical */
+const DRIFT=0.188;     /* link drift speed (1 = original speed) */
+const ROW_SPACING=50;  /* pixels from one link to the next, top to bottom, when lined up */
+const COL_GAP=48;      /* pixels between columns */
+const ONE_COL_MAX=8;   /* this many links or fewer line up in a single column */
+const SOLO_FIRST=4;             /* first motion diagram within this many seconds */
+const SOLO_MIN=10,SOLO_MAX=15;  /* seconds between motion diagrams after that */
+const START_LINED_UP=true;       /* links start lined up; the button lets them drift */
+const HOLD=3;         /* seconds the links stay lined up before drifting */
+/* ================================================================ */
+
+const stage=document.getElementById('stage'),cv=document.getElementById('cv'),ctx=cv.getContext('2d'),layer=document.getElementById('layer'),tidyBtn=document.getElementById('tidy');
+const dpr=Math.min(window.devicePixelRatio||1,2);
+let W=0,H=0;
+const reduce=window.matchMedia&&matchMedia('(prefers-reduced-motion: reduce)').matches;
+const SPD=reduce?0.35:1;
+const rnd=(a,b)=>a+Math.random()*(b-a),pick=a=>a[Math.floor(Math.random()*a.length)];
+let framed=true;try{framed=window.top!==window.self}catch(e){}
+const TGT=framed?['_blank','noopener']:['_self',''];
+const STAR='<svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2L13.22 9.04 16.6 7.4 14.96 10.78 22 12 14.96 13.22 16.6 16.6 13.22 14.96 12 22 10.78 14.96 7.4 16.6 9.04 13.22 2 12 9.04 10.78 7.4 7.4 10.78 9.04Z"/></svg>';
+
+/* ---------- Links ---------- */
+const HUE0=rnd(0,360);
+/* Title color: hue drifts; darker for yellows and greens so every color stays readable on white */
+function titleColor(h){const d1=((h-70+540)%360-180)/45,d2=((h-150+540)%360-180)/40,l=40-9*Math.exp(-d1*d1)-5*Math.exp(-d2*d2);return `hsl(${h|0},62%,${l.toFixed(1)}%)`}
+const ordered=SORT_AZ?[...LINKS].sort((a,b)=>a[0].localeCompare(b[0])):LINKS;
+const items=ordered.map(([t,slug],i)=>{
+ const a=document.createElement('a');a.className='lk';a.href=/^https?:\/\//.test(slug)?slug:BASE+slug;a.target=TGT[0];if(TGT[1])a.rel=TGT[1];
+ a.innerHTML=STAR+'<span>'+t+'</span>';layer.appendChild(a);
+ const it={a,x:0,y:0,hx:0,hy:0,w:0,h:0,ang:rnd(0,6.283),sp:rnd(9,15),held:false,hue:(HUE0+i*137.5)%360,hv:(Math.random()<0.5?-1:1)*rnd(6,12)};
+ a.style.color=titleColor(it.hue);
+ const hold=v=>()=>{it.held=v};
+ a.addEventListener('mouseenter',hold(true));a.addEventListener('mouseleave',hold(false));
+ a.addEventListener('focus',hold(true));a.addEventListener('blur',hold(false));
+ return it;
+});
+function measure(){items.forEach(it=>{it.w=it.a.offsetWidth;it.h=it.a.offsetHeight})}
+function homes(){
+ /* Each column is only as wide as its longest title, with a modest gap, and the block is centered */
+ /* A short list is one column; a longer list uses as few columns as fit, adding one only when the rows no longer fit top to bottom */
+ const n=items.length,GAP=COL_GAP,ROWMIN=42,availH=H-90;
+ const fit=c=>{const rows=Math.ceil(n/c),cw=[];for(let k=0;k<c;k++){const col=items.slice(k*rows,(k+1)*rows);cw.push(col.length?Math.max(...col.map(i=>i.w)):0)}
+  return {cols:c,rows,cw,total:cw.reduce((a,b)=>a+b,0)+GAP*(c-1)}};
+ let L=null;
+ for(let c=n<=ONE_COL_MAX?1:2;c<=5;c++){const f=fit(c);if(f.total>W-24)break;L=f;if(f.rows*ROWMIN<=availH)break}
+ if(!L)L=fit(1);
+ const {rows,cw,total}=L;
+ const rowH=Math.max(ROWMIN,Math.min(ROW_SPACING,availH/rows));
+ let x=Math.max(8,(W-total)/2);const xs=cw.map(w=>{const v=x;x+=w+GAP;return v});
+ const y0=Math.max(54,(H-rows*rowH)/2);
+ items.forEach((it,i)=>{const c=Math.floor(i/rows),r=i%rows;it.hx=xs[c];it.hy=y0+r*rowH});
+}
+function size(){
+ W=stage.clientWidth;H=stage.clientHeight;cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
+ measure();homes();
+}
+size();
+items.forEach(it=>{it.x=it.hx;it.y=it.hy;place(it)});
+function place(it){it.a.style.transform=`translate(${it.x.toFixed(1)}px,${it.y.toFixed(1)}px)`}
+window.addEventListener('resize',()=>{size();items.forEach(it=>{it.x=Math.min(it.x,Math.max(8,W-it.w-8));it.y=Math.min(it.y,Math.max(8,H-it.h-8))})});
+(document.fonts?document.fonts.ready:Promise.resolve()).then(()=>{size();if(T<HOLD)items.forEach(it=>{it.x=it.hx;it.y=it.hy;place(it)})});
+
+let tidy=START_LINED_UP;
+if(!tidy){tidyBtn.setAttribute('aria-pressed','false');tidyBtn.querySelector('span').textContent='Drift'}
+tidyBtn.addEventListener('click',()=>{tidy=!tidy;tidyBtn.setAttribute('aria-pressed',tidy);tidyBtn.querySelector('span').textContent=tidy?'Align':'Drift';if(tidy)homes()});
+
+function moveLinks(dt){
+ const ramp=Math.max(0,Math.min(1,(T-HOLD)/4));
+ const b=tidyBtn.getBoundingClientRect(),s=stage.getBoundingClientRect();
+ const bx=b.left-s.left-6,by=b.top-s.top-6,bw=b.width+12,bh=b.height+12;
+ for(const it of items){
+  if(tidy||T<HOLD){const k=Math.min(1,dt*2.2);it.x+=(it.hx-it.x)*k;it.y+=(it.hy-it.y)*k;continue}
+  if(it.held)continue;
+  it.ang+=(Math.random()-0.5)*0.5*dt;
+  const v=it.sp*DRIFT*ramp;it.x+=Math.cos(it.ang)*v*dt;it.y+=Math.sin(it.ang)*v*dt;
+  const mx=Math.max(8,W-it.w-8),my=Math.max(8,H-it.h-8);
+  if(it.x<8){it.x=8;it.ang=Math.PI-it.ang}if(it.x>mx){it.x=mx;it.ang=Math.PI-it.ang}
+  if(it.y<8){it.y=8;it.ang=-it.ang}if(it.y>my){it.y=my;it.ang=-it.ang}
+  const ox=Math.min(it.x+it.w,bx+bw)-Math.max(it.x,bx),oy=Math.min(it.y+it.h,by+bh)-Math.max(it.y,by);
+  if(ox>0&&oy>0){if(oy<ox){it.y=it.y<by?by-it.h:by+bh;it.ang=-it.ang}else{it.x=it.x<bx?bx-it.w:bx+bw;it.ang=Math.PI-it.ang}}
+ }
+ if(!tidy&&T>=HOLD){
+  const pad=6,push=30*dt;
+  for(let i=0;i<items.length;i++)for(let j=i+1;j<items.length;j++){
+   const p=items[i],q=items[j];
+   const ox=Math.min(p.x+p.w,q.x+q.w)+pad-Math.max(p.x,q.x),oy=Math.min(p.y+p.h,q.y+q.h)+pad-Math.max(p.y,q.y);
+   if(ox>0&&oy>0){
+    if(oy<ox){const d=Math.min(oy/2,push),sg=p.y<q.y?-1:1;if(!p.held)p.y+=sg*d;if(!q.held)q.y-=sg*d;
+     if(Math.sin(p.ang)*sg<0)p.ang=-p.ang;if(Math.sin(q.ang)*sg>0)q.ang=-q.ang}
+    else{const d=Math.min(ox/2,push),sg=p.x<q.x?-1:1;if(!p.held)p.x+=sg*d;if(!q.held)q.x-=sg*d;
+     if(Math.cos(p.ang)*sg<0)p.ang=Math.PI-p.ang;if(Math.cos(q.ang)*sg>0)q.ang=Math.PI-q.ang}
+   }
+  }
+ }
+ for(const it of items){if(Math.random()<dt*0.05)it.hv=-it.hv;it.hue=(it.hue+it.hv*dt+360)%360;it.a.style.color=titleColor(it.hue)}
+ items.forEach(place);
+}
+
+/* ---------- Physics sketches ---------- */
+const COLS=['#5f86d4','#df7f6a','#3fa894','#8f7bd6','#cf9c32','#d0679a'];
+const MATH="'STIX Two Text','Cambria Math','Times New Roman',serif";
+/* Equations (from the Honors Physics formula sheet): plain text, or a list of pieces where {f:[top,bottom]} is a stacked fraction
+   and {r:[top,bottom]} is a stacked fraction under a square root. Write F_N for a one-letter subscript, W_{nc} for a longer one. */
+const EQS=['v = v₀ + at',['x = x₀ + v₀t + ',{f:['1','2']},'at²'],'v² = v₀² + 2a(x − x₀)','ΣF = ma','F_f = μF_N',
+ ['a_c = ',{f:['v²','r']},' = ',{f:['4π²r','T²']}],'F_c = ma_c','C = 2πr','W = Fd cos θ',['P = ',{f:['W','t']},' = Fv cos θ'],
+ ['KE = ',{f:['1','2']},'mv²'],'U_g = mgh','ΣW = ΔKE','E_i + W_{nc} = E_f','p = mv','J = Δp','FΔt = mΔv',
+ ['F_g = G ',{f:['m₁m₂','r²']}],['F_e = k ',{f:['Q₁Q₂','r²']}],['E = ',{f:['F','q']}],['I = ',{f:['Q','t']}],'V = IR','P = IV = I²R',
+ 'R_S = R₁ + R₂',[{f:['1','R_P']},' = ',{f:['1','R₁']},' + ',{f:['1','R₂']}],'v = fλ',['T = ',{f:['1','f']}],'n₁ sin θ₁ = n₂ sin θ₂','g = 9.80 m/s²'];
+function arrow(x1,y1,x2,y2,col,lw){
+ const a=Math.atan2(y2-y1,x2-x1),len=Math.hypot(x2-x1,y2-y1);if(len<2)return;
+ const h=Math.min(9,len*0.45);ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=lw||2;ctx.lineCap='round';
+ ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2-Math.cos(a)*h*0.7,y2-Math.sin(a)*h*0.7);ctx.stroke();
+ ctx.beginPath();ctx.moveTo(x2,y2);ctx.lineTo(x2-h*Math.cos(a-0.42),y2-h*Math.sin(a-0.42));ctx.lineTo(x2-h*Math.cos(a+0.42),y2-h*Math.sin(a+0.42));ctx.closePath();ctx.fill();
+}
+/* A bare arrowhead with its point at (x,y), facing direction a */
+function tip(x,y,a,col,h){ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x-h*Math.cos(a-0.45),y-h*Math.sin(a-0.45));ctx.lineTo(x-h*Math.cos(a+0.45),y-h*Math.sin(a+0.45));ctx.closePath();ctx.fill()}
+/* Text with subscripts: F_N or W_{nc} */
+function segs(t){const out=[],re=/_(?:\{([^}]+)\}|(\w))/g;let last=0,m;while((m=re.exec(t))){if(m.index>last)out.push([t.slice(last,m.index),0]);out.push([m[1]||m[2],1]);last=re.lastIndex}if(last<t.length)out.push([t.slice(last),0]);return out}
+function textW(t,sz){let w=0;for(const [s,sub] of segs(t)){ctx.font=`italic ${sub?sz*0.68:sz}px ${MATH}`;w+=ctx.measureText(s).width}return w}
+/* Equation layout: text pieces, stacked fractions, and square roots over stacked fractions */
+function fracW(p,sz){const fs=sz*0.8;return Math.max(textW(p[0],fs),textW(p[1],fs))+sz*0.3}
+function partW(p,sz){if(typeof p==='string')return textW(p,sz);if(p.f)return fracW(p.f,sz)+sz*0.08;return sz*0.6+fracW(p.r,sz)+sz*0.15}
+function eqW(eq,sz){return eq.reduce((a,p)=>a+partW(p,sz),0)}
+function drawFrac(p,fx,fw,cy,col,sz){ctx.strokeStyle=col;ctx.lineWidth=Math.max(1,sz*0.045);ctx.lineCap='round';
+ ctx.beginPath();ctx.moveTo(fx-fw/2+sz*0.06,cy+sz*0.03);ctx.lineTo(fx+fw/2-sz*0.06,cy+sz*0.03);ctx.stroke();
+ label(p[0],fx,cy-sz*0.43,col,sz*0.8);label(p[1],fx,cy+sz*0.5,col,sz*0.8)}
+function eqDraw(eq,cx,cy,col,sz){let x=cx-eqW(eq,sz)/2;
+ for(const p of eq){const w=partW(p,sz);
+  if(typeof p==='string')label(p,x+w/2,cy,col,sz);
+  else if(p.f)drawFrac(p.f,x+w/2,fracW(p.f,sz),cy,col,sz);
+  else{const fw=fracW(p.r,sz),rx=x+sz*0.05,top=cy-sz*0.98,bot=cy+sz*0.98,vx=rx+sz*0.55;
+   ctx.strokeStyle=col;ctx.lineWidth=Math.max(1.2,sz*0.055);ctx.lineJoin='round';ctx.lineCap='round';
+   ctx.beginPath();ctx.moveTo(rx,cy+sz*0.18);ctx.lineTo(rx+sz*0.13,cy+sz*0.06);ctx.lineTo(rx+sz*0.32,bot);ctx.lineTo(vx,top);ctx.lineTo(vx+fw+sz*0.1,top);ctx.stroke();
+   drawFrac(p.r,vx+sz*0.05+fw/2,fw,cy,col,sz)}
+  x+=w}}
+function label(t,x,y,col,sz){sz=sz||17;ctx.fillStyle=col;ctx.textBaseline='middle';ctx.textAlign='left';let cx=x-textW(t,sz)/2;
+ for(const [s,sub] of segs(t)){const fs=sub?sz*0.68:sz;ctx.font=`italic ${fs}px ${MATH}`;ctx.fillText(s,cx,y+(sub?sz*0.28:0));cx+=ctx.measureText(s).width}}
+function hatch(x1,y,x2,col,down){ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(x1,y);ctx.lineTo(x2,y);for(let x=x1+4;x<=x2;x+=9){ctx.moveTo(x,y);ctx.lineTo(x-6,y+(down?7:-7))}ctx.stroke()}
+function dot(x,y,r,col){ctx.fillStyle=col;ctx.beginPath();ctx.arc(x,y,r,0,6.283);ctx.fill()}
+/* A box drawn as an outline over a faint fill of the same color */
+function box(x,y,w,h,col){const ga=ctx.globalAlpha;ctx.globalAlpha=ga*0.3;ctx.fillStyle=col;ctx.fillRect(x,y,w,h);ctx.globalAlpha=ga;ctx.strokeStyle=col;ctx.lineWidth=1.4;ctx.strokeRect(x,y,w,h)}
+const ease=t=>t<0?0:t>1?1:t*t*(3-2*t);
+
+const KINDS={
+ equation(){const sz=rnd(22,34),t=pick(EQS),eq=typeof t==='string'?[t]:t,tall=eq.some(p=>typeof p!=='string'),w=eqW(eq,sz),h=tall?sz*2:sz;
+  return {w,h,life:rnd(9,13),peak:0.42,vx:rnd(-7,7),vy:rnd(-5,5),rot:rnd(-0.12,0.12),
+   draw(g){ctx.save();ctx.translate(g.x+w/2,g.y+h/2);ctx.rotate(g.rot);eqDraw(eq,0,0,g.col,sz);ctx.restore()}}},
+
+ /* Kinematics: a motion diagram. A ball speeds up across the whole box, leaving a dot and a velocity arrow at equal time steps */
+ motionmap(){
+  const dir=Math.random()<0.5?1:-1,Tf=rnd(6,8),D=W+60,x0=dir>0?-30:W+30,v0=0.3*D/Tf,a=2*(D-v0*Tf)/(Tf*Tf),y=H*rnd(0.12,0.88),step=0.55;
+  const X=s=>x0+dir*(v0*s+0.5*a*s*s),V=s=>v0+a*s;
+  return {solo:true,life:Tf+2.2,peak:0.6,fixed:true,
+   draw(gz,t){const tt=Math.min(t,Tf),col=gz.col;
+    ctx.strokeStyle=col;ctx.lineWidth=1;ctx.setLineDash([3,5]);ctx.beginPath();ctx.moveTo(X(0),y);ctx.lineTo(X(tt),y);ctx.stroke();ctx.setLineDash([]);
+    let ls=0;for(let s=0;s<=tt;s+=step){const px=X(s);dot(px,y,3.2,col);arrow(px,y+16,px+dir*V(s)*0.3,y+16,col,1.5);ls=s}
+    label('v',X(ls)+dir*V(ls)*0.15,y+31,col,15);
+    if(t<Tf){const bx=X(tt);arrow(bx,y-20,bx+dir*46,y-20,col,2);label('a',bx+dir*23,y-34,col,16);dot(bx,y,8,col)}}}},
+
+ /* Circuits: battery and resistor, with charge drifting around the loop */
+ circuit(){
+  return {w:210,h:140,life:rnd(10,14),peak:0.55,
+   draw(g,t){const col=g.col,x0=g.x+18,x1=g.x+g.w-18,y0=g.y+28,y1=g.y+g.h-12,cy=(y0+y1)/2,xm=(x0+x1)/2,a=y1-y0,b=x1-x0,P=2*(a+b);
+    ctx.strokeStyle=col;ctx.lineWidth=1.8;ctx.lineJoin='round';ctx.lineCap='round';
+    ctx.beginPath();ctx.moveTo(x0,cy-5);ctx.lineTo(x0,y0);ctx.lineTo(xm-30,y0);
+    for(let i=0;i<6;i++)ctx.lineTo(xm-25+i*10,y0+(i%2?8:-8));
+    ctx.lineTo(xm+30,y0);ctx.lineTo(x1,y0);ctx.lineTo(x1,y1);ctx.lineTo(x0,y1);ctx.lineTo(x0,cy+5);ctx.stroke();
+    ctx.lineWidth=2.2;ctx.beginPath();ctx.moveTo(x0-12,cy-5);ctx.lineTo(x0+12,cy-5);ctx.moveTo(x0-6,cy+5);ctx.lineTo(x0+6,cy+5);ctx.stroke();
+    label('R',xm,y0-19,col,16);label('V',x0+26,cy,col,16);
+    arrow(xm+15,y1-11,xm-15,y1-11,col,1.5);label('I',xm,y1-25,col,16);
+    for(let i=0;i<10;i++){let s=(t*38+i*P/10)%P,px,py;
+     if(s<a){px=x0;py=y1-s}else if((s-=a)<b){px=x0+s;py=y0}else if((s-=b)<a){px=x1;py=y0+s}else{s-=a;px=x1-s;py=y1}
+     if(px===x0&&Math.abs(py-cy)<9)continue;
+     dot(px,py,3,col)}}}},
+
+ /* Electric fields: field lines running from a positive charge to a negative one */
+ efield(){
+  const d=52,BX=126,BY=80,lines=[];
+  for(let i=0;i<12;i++){const A=(i+0.5)*Math.PI/6;let x=-d+11*Math.cos(A),y=11*Math.sin(A),out=false;const pts=[[x,y]];
+   for(let k=0;k<400;k++){const ax=x+d,bx=x-d,ra=Math.hypot(ax,y)**3,rb=Math.hypot(bx,y)**3,ex=ax/ra-bx/rb,ey=y/ra-y/rb,m=Math.hypot(ex,ey)||1;
+    x+=3*ex/m;y+=3*ey/m;if(Math.abs(x)>BX||Math.abs(y)>BY){out=true;break}pts.push([x,y]);if(Math.hypot(x-d,y)<11)break}
+   lines.push(pts);if(out)lines.push(pts.map(([px,py])=>[-px,py]).reverse())}
+  return {w:2*BX+12,h:2*BY+12,life:rnd(11,14),peak:0.55,
+   draw(g,t){const col=g.col,ox=g.x+g.w/2,oy=g.y+g.h/2,s=ease((t-0.4)/2.6);
+    ctx.strokeStyle=col;ctx.lineWidth=1.3;ctx.lineJoin='round';ctx.lineCap='round';
+    for(const pts of lines){const n=Math.ceil(pts.length*s);if(n<2)continue;
+     ctx.beginPath();ctx.moveTo(ox+pts[0][0],oy+pts[0][1]);for(let k=1;k<n;k++)ctx.lineTo(ox+pts[k][0],oy+pts[k][1]);ctx.stroke();
+     const k=Math.floor(pts.length*0.5);if(k>=1&&n>k)tip(ox+pts[k][0],oy+pts[k][1],Math.atan2(pts[k][1]-pts[k-1][1],pts[k][0]-pts[k-1][0]),col,8)}
+    dot(ox-d,oy,11,col);dot(ox+d,oy,11,col);
+    ctx.strokeStyle='#fff';ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(ox-d-5,oy);ctx.lineTo(ox-d+5,oy);ctx.moveTo(ox-d,oy-5);ctx.lineTo(ox-d,oy+5);ctx.moveTo(ox+d-5,oy);ctx.lineTo(ox+d+5,oy);ctx.stroke();
+    if(s>0.9)label('E',ox-BX+12,oy-BY+14,col,17)}}},
+
+ /* Snell's law: a ray bends toward the normal as it enters the slower medium; the angle of incidence sweeps slowly */
+ snell(){const n2=rnd(1.4,1.6),L=86,ph=rnd(0,6.283);
+  return {w:240,h:196,life:rnd(11,14),peak:0.55,
+   draw(g,t){const col=g.col,cx=g.x+g.w/2,cy=g.y+g.h/2,th1=0.72+0.33*Math.sin(t*0.7+ph),th2=Math.asin(Math.sin(th1)/n2);
+    const ga=ctx.globalAlpha;ctx.globalAlpha=ga*0.16;ctx.fillStyle=col;ctx.fillRect(g.x,cy,g.w,g.h/2);ctx.globalAlpha=ga;
+    ctx.strokeStyle=col;ctx.lineWidth=1.4;ctx.beginPath();ctx.moveTo(g.x,cy);ctx.lineTo(g.x+g.w,cy);ctx.stroke();
+    ctx.setLineDash([3,5]);ctx.lineWidth=1.1;ctx.beginPath();ctx.moveTo(cx,g.y+6);ctx.lineTo(cx,g.y+g.h-6);ctx.stroke();ctx.setLineDash([]);
+    const ix=cx-L*Math.sin(th1),iy=cy-L*Math.cos(th1),rx=cx+L*Math.sin(th2),ry=cy+L*Math.cos(th2);
+    arrow(ix,iy,(ix+cx)/2,(iy+cy)/2,col,2.2);ctx.beginPath();ctx.moveTo((ix+cx)/2,(iy+cy)/2);ctx.lineTo(cx,cy);ctx.stroke();
+    arrow(cx,cy,(rx+cx)/2,(ry+cy)/2,col,2.2);ctx.beginPath();ctx.moveTo((rx+cx)/2,(ry+cy)/2);ctx.lineTo(rx,ry);ctx.stroke();
+    ctx.lineWidth=1.1;ctx.beginPath();ctx.arc(cx,cy,26,-Math.PI/2-th1,-Math.PI/2);ctx.stroke();
+    ctx.beginPath();ctx.arc(cx,cy,32,Math.PI/2-th2,Math.PI/2);ctx.stroke();
+    label('θ₁',cx-41*Math.sin(th1/2),cy-41*Math.cos(th1/2),col,15);label('θ₂',cx+48*Math.sin(th2/2),cy+48*Math.cos(th2/2),col,15);
+    label('n₁',g.x+g.w-20,cy-16,col,15);label('n₂',g.x+20,cy+16,col,15)}}},
+
+ /* Momentum: equal carts between two bumpers hand their momentum back and forth */
+ collision(){const w=280,c=40,D=w/2-c-6,seg=1.2;
+  return {w,h:86,life:rnd(10,14),peak:0.55,
+   draw(g,t){const col=g.col,gy=g.y+74,u=t%(4*seg);let x1=w/2-c,x2=w/2,mv,dir;
+    if(u<seg){x1=6+D*u/seg;mv=1;dir=1}else if(u<2*seg){x2=w/2+D*(u-seg)/seg;mv=2;dir=1}
+    else if(u<3*seg){x2=w/2+D*(1-(u-2*seg)/seg);mv=2;dir=-1}else{x1=w/2-c-D*(u-3*seg)/seg;mv=1;dir=-1}
+    hatch(g.x,gy,g.x+w,col,true);
+    ctx.lineWidth=2;ctx.beginPath();ctx.moveTo(g.x+3,gy);ctx.lineTo(g.x+3,gy-38);ctx.moveTo(g.x+w-3,gy);ctx.lineTo(g.x+w-3,gy-38);ctx.stroke();
+    for(const [x,k] of [[x1,1],[x2,2]]){const px=g.x+x;box(px,gy-33,c,25,col);dot(px+9,gy-4,4,col);dot(px+c-9,gy-4,4,col);label('m',px+c/2,gy-21,col,14);
+     if(k===mv){const mx=px+c/2;arrow(mx-dir*17,gy-46,mx+dir*17,gy-46,col,1.8);label('v',mx,gy-60,col,15)}}}}},
+
+ /* Circular motion: velocity along the tangent, acceleration toward the center */
+ circular(){const r=rnd(52,62),om=(Math.random()<0.5?-1:1)*2*Math.PI/rnd(3.6,4.6),ph=rnd(0,6.283);
+  return {w:2*r+76,h:2*r+76,life:rnd(10,14),peak:0.55,
+   draw(g,t){const col=g.col,cx=g.x+g.w/2,cy=g.y+g.h/2,th=om*t+ph,c=Math.cos(th),s=Math.sin(th),sg=om>0?1:-1,bx=cx+r*c,by=cy+r*s,tx=-s*sg,ty=c*sg;
+    ctx.setLineDash([3,6]);ctx.strokeStyle=col;ctx.lineWidth=1.2;ctx.beginPath();ctx.arc(cx,cy,r,0,6.283);ctx.stroke();ctx.setLineDash([]);
+    dot(cx,cy,2.5,col);
+    arrow(bx,by,bx+tx*40,by+ty*40,col,2);label('v',bx+tx*52,by+ty*52,col,16);
+    arrow(bx,by,bx-c*34,by-s*34,col,2);label('a_c',bx-c*20-tx*15,by-s*20-ty*15,col,15);
+    dot(bx,by,7,col)}}},
+
+ /* Energy: a ball rolling in a bowl trades potential energy for kinetic and back */
+ energy(){const A=70,om=2*Math.PI/rnd(2.6,3.2),hw=85,dp=64;
+  return {w:250,h:108,life:rnd(10,14),peak:0.55,
+   draw(g,t){const col=g.col,ox=g.x+95,bot=g.y+86,f=x=>bot-dp*(x/hw)*(x/hw);
+    ctx.strokeStyle=col;ctx.lineWidth=1.8;ctx.lineJoin='round';ctx.beginPath();for(let x=-hw;x<=hw;x+=5){x===-hw?ctx.moveTo(ox+x,f(x)):ctx.lineTo(ox+x,f(x))}ctx.stroke();
+    const x=A*Math.cos(om*t),fp=-2*dp*x/(hw*hw),nm=Math.hypot(fp,1);dot(ox+x+8*fp/nm,f(x)-8/nm,7,col);
+    const U=(x/A)*(x/A),bx=g.x+198,bh=58;
+    [[1-U,'KE'],[U,'U_g']].forEach(([v,name],i)=>{const px=bx+i*28;ctx.strokeStyle=col;ctx.lineWidth=1.2;ctx.strokeRect(px,bot-bh,16,bh);ctx.fillStyle=col;ctx.fillRect(px,bot-bh*v,16,bh*v);label(name,px+8,bot+13,col,13)})}}},
+
+ /* Waves: a standing wave on a string, with one wavelength marked */
+ standing(){const L=rnd(240,300),n=pick([2,3,4]),A=rnd(17,23),om=2*Math.PI/rnd(1.7,2.3),k=n*Math.PI/L;
+  return {w:L,h:2*A+46,life:rnd(10,13),peak:0.55,
+   draw(g,t){const col=g.col,y0=g.y+32+A,c=Math.cos(om*t),ga=ctx.globalAlpha;
+    ctx.strokeStyle=col;ctx.lineWidth=1;ctx.setLineDash([3,5]);ctx.globalAlpha=ga*0.6;
+    for(const sg of [1,-1]){ctx.beginPath();for(let x=0;x<=L;x+=4){const yy=y0-sg*A*Math.sin(k*x);x?ctx.lineTo(g.x+x,yy):ctx.moveTo(g.x,yy)}ctx.stroke()}
+    ctx.setLineDash([]);ctx.globalAlpha=ga;
+    ctx.lineWidth=2;ctx.beginPath();for(let x=0;x<=L;x+=3){const yy=y0-A*c*Math.sin(k*x);x?ctx.lineTo(g.x+x,yy):ctx.moveTo(g.x,yy)}ctx.lineTo(g.x+L,y0);ctx.stroke();
+    for(let i=0;i<=n;i++)dot(g.x+i*L/n,y0,i%n?3:4.5,col);
+    const lam=2*L/n,yb=y0-A-11;ctx.lineWidth=1.3;ctx.beginPath();ctx.moveTo(g.x,yb+5);ctx.lineTo(g.x,yb);ctx.lineTo(g.x+lam,yb);ctx.lineTo(g.x+lam,yb+5);ctx.stroke();
+    label('λ',g.x+lam/2,yb-11,col,16)}}},
+
+ /* Motion graphs: a position-time curve is drawn, then a tangent slides along it (slope = velocity) */
+ graph(){
+  return {w:224,h:152,life:rnd(11,14),peak:0.55,
+   draw(g,t){const col=g.col,ox=g.x+26,oy=g.y+g.h-22,GX=160,GY=104,um=ease(t/3),up=t<3?um:0.6+0.4*Math.cos((t-3)*0.8);
+    arrow(ox,oy,ox+GX+26,oy,col,1.4);arrow(ox,oy,ox,oy-GY-22,col,1.4);label('t',ox+GX+18,oy+12,col,15);label('x',ox-13,oy-GY-14,col,15);
+    ctx.strokeStyle=col;ctx.lineWidth=2.2;ctx.lineJoin='round';ctx.lineCap='round';ctx.beginPath();ctx.moveTo(ox,oy);
+    for(let u=0.02;u<um;u+=0.02)ctx.lineTo(ox+GX*u,oy-GY*u*u);ctx.lineTo(ox+GX*um,oy-GY*um*um);ctx.stroke();
+    const px=ox+GX*up,py=oy-GY*up*up,dx=GX,dy=-2*GY*up,m=Math.hypot(dx,dy),ex=dx/m*34,ey=dy/m*34;
+    if(t>=3){ctx.lineWidth=1.3;ctx.setLineDash([5,4]);ctx.beginPath();ctx.moveTo(px-ex,py-ey);ctx.lineTo(px+ex,py+ey);ctx.stroke();ctx.setLineDash([]);
+     ctx.globalAlpha*=ease((t-3)/0.8);label('slope = v',ox+60,oy-GY-8,col,15);ctx.globalAlpha=g.al}
+    dot(px,py,5,col)}}},
+
+ /* Forces: a free-body diagram builds one force at a time */
+ fbd(){
+  return {w:224,h:172,life:rnd(10,13),peak:0.6,
+   draw(g,t){const col=g.col,cx=g.x+108,cy=g.y+88;
+    hatch(cx-74,cy+17,cx+86,col,true);box(cx-23,cy-17,46,34,col);dot(cx,cy,2.5,col);
+    const s1=ease((t-0.8)/0.8),s2=ease((t-1.9)/0.8),s3=ease((t-3)/0.8),s4=ease((t-4.1)/0.8);
+    if(s1>0){arrow(cx,cy,cx,cy+58*s1,col,2);if(s1>0.9)label('F_g',cx+20,cy+56,col,16)}
+    if(s2>0){arrow(cx,cy,cx,cy-58*s2,col,2);if(s2>0.9)label('F_N',cx+21,cy-54,col,16)}
+    if(s3>0){arrow(cx,cy,cx+72*s3,cy,col,2);if(s3>0.9)label('F_{app}',cx+56,cy-18,col,16)}
+    if(s4>0){arrow(cx,cy,cx-44*s4,cy,col,2);if(s4>0.9)label('F_f',cx-46,cy-15,col,16)}}}}
+};
+const SKETCHES=['circuit','efield','snell','collision','circular','energy','standing','graph','fbd'];
+const WEIGHTS=[['equation',5],...SKETCHES.map(k=>[k,1])];
+const WSUM=WEIGHTS.reduce((a,b)=>a+b[1],0);
+function pickKind(){let r=Math.random()*WSUM;for(const [k,w] of WEIGHTS){if((r-=w)<=0)return k}return 'equation'}
+let gizmos=[],nextSpawn=4,nextSolo=rnd(1,SOLO_FIRST);
+/* Already on screen when the page opens: three sketches (different kinds) and one equation */
+function initialGizmos(){
+ const sk=[...SKETCHES].sort(()=>Math.random()-0.5);
+ spawn(sk[0],rnd(1.5,3),true);spawn(sk[1],rnd(1.5,3),true);spawn(sk[2],rnd(1.5,3),true);spawn('equation',rnd(1.5,3),true);
+}
+function spawn(force,age0,noCap){
+ const maxG=W<520?2:W<900?3:5;
+ let kind=force||pickKind();
+ /* Avoid showing two of the same sketch at once */
+ if(!force&&kind!=='equation'&&gizmos.some(g=>g.kind===kind))kind='equation';
+ if(!noCap&&kind!=='motionmap'&&gizmos.filter(g=>!g.solo).length>=maxG)return;
+ const g=KINDS[kind]();g.kind=kind;g.age=age0||0;g.col=pick(COLS);
+ if(!g.fixed){
+  if(g.w>W-20||g.h>H-20){if(kind!=='equation')return}
+  let best=null,bs=-Infinity;
+  for(let i=0;i<30;i++){const x=rnd(10,Math.max(10,W-g.w-10)),y=rnd(10,Math.max(10,H-g.h-10));
+   let s=Infinity;for(const o of gizmos){if(o.fixed)continue;s=Math.min(s,Math.hypot(x+g.w/2-o.x-o.w/2,y+g.h/2-o.y-o.h/2)-(Math.max(g.w,g.h)+Math.max(o.w,o.h))/2)}
+   if(s>bs){bs=s;best=[x,y]}}
+  if(!best)return;g.x=best[0];g.y=best[1];
+ }
+ gizmos.push(g);
+}
+function drawGizmos(dt){
+ for(const g of gizmos){
+  g.age+=dt;if(g.vx){g.x+=g.vx*dt;g.y+=g.vy*dt}
+  const env=Math.min(1,g.age/1.4,(g.life-g.age)/1.4);g.al=Math.max(0,env)*g.peak;
+  ctx.globalAlpha=g.al;g.draw(g,g.age);
+ }
+ ctx.globalAlpha=1;
+ gizmos=gizmos.filter(g=>g.age<g.life);
+}
+
+/* ---------- Loop (pauses when hidden or scrolled away) ---------- */
+let visible=true,running=false,last=performance.now(),T=0;
+function start(){if(!running&&visible&&!document.hidden){running=true;last=performance.now();requestAnimationFrame(frame)}}
+if('IntersectionObserver' in window)new IntersectionObserver(es=>{visible=es[0].isIntersecting;start()}).observe(stage);
+document.addEventListener('visibilitychange',start);
+function frame(now){
+ if(!visible||document.hidden){running=false;return}
+ const dt=Math.min(0.05,(now-last)/1000)*SPD;last=now;T+=dt;
+ nextSpawn-=dt;if(nextSpawn<=0){spawn();nextSpawn=rnd(2,4)}
+ nextSolo-=dt;if(nextSolo<=0){spawn('motionmap');nextSolo=rnd(SOLO_MIN,SOLO_MAX)}
+ ctx.clearRect(0,0,W,H);drawGizmos(dt);moveLinks(dt);
+ requestAnimationFrame(frame);
+}
+initialGizmos();
+start();
+</script>
+</body>
+</html>
