@@ -286,16 +286,18 @@ const KINDS={
     arrow(g.x+30,cy-46,g.x+56,cy-46,col,1.8);label('v₁',g.x+43,cy-60,col,15);arrow(g.x+190,cy-27,g.x+250,cy-27,col,1.8);label('v₂',g.x+220,cy-41,col,15);
     label('A₁',g.x+43,cy+48,col,15);label('A₂',g.x+220,cy+30,col,15)}}},
 
- /* Fluids, buoyancy: a floating block bobs where the buoyant force balances its weight */
- buoyancy(){const om=2*Math.PI/rnd(2.8,3.4);
-  return {w:200,h:156,life:rnd(10,14),peak:0.55,
-   draw(g,t){const col=g.col,x0=g.x+18,x1=g.x+182,top=g.y+34,bot=g.y+148,wl=g.y+70,cx=g.x+100,by=wl+7+5*Math.sin(om*t),ga=ctx.globalAlpha;
+ /* Fluids, buoyancy: a block slightly denser than the fluid sinks. The buoyant force grows while the block is going under,
+    then holds steady just below the weight once the block is fully submerged; the sketch then fades and starts over */
+ buoyancy(){const RUN=rnd(5,6),P=0.7+RUN+0.6+0.6,FG=40,FB=0.88*FG;
+  return {w:200,h:210,life:rnd(11,14),peak:0.55,
+   draw(g,t){const col=g.col,x0=g.x+18,x1=g.x+182,top=g.y+30,bot=g.y+202,wl=g.y+70,cx=g.x+100,k=t%P,u=Math.max(0,Math.min(1,(k-0.7)/RUN));
+    const by=g.y+57+95*Math.pow(u,1.5),f=Math.max(0,Math.min(1,(by+22-wl)/44)),lb=FB*f,ga0=ctx.globalAlpha,ga=ga0*Math.min(1,k/0.5,(P-k)/0.5);
     ctx.globalAlpha=ga*0.14;ctx.fillStyle=col;ctx.fillRect(x0,wl,x1-x0,bot-wl);ctx.globalAlpha=ga;
     ctx.strokeStyle=col;ctx.lineWidth=1.8;ctx.lineJoin='round';ctx.beginPath();ctx.moveTo(x0,top);ctx.lineTo(x0,bot);ctx.lineTo(x1,bot);ctx.lineTo(x1,top);ctx.stroke();
-    ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(x0,wl);ctx.lineTo(cx-27,wl);ctx.moveTo(cx+27,wl);ctx.lineTo(x1,wl);ctx.stroke();
+    ctx.lineWidth=1.2;ctx.beginPath();ctx.moveTo(x0,wl);if(by-22<wl){ctx.lineTo(cx-27,wl);ctx.moveTo(cx+27,wl)}ctx.lineTo(x1,wl);ctx.stroke();
     box(cx-27,by-22,54,44,col);dot(cx,by,2.5,col);
-    arrow(cx,by,cx,by-52,col,2);label('F_b',cx+19,by-46,col,16);arrow(cx,by,cx,by+52,col,2);label('F_g',cx+19,by+46,col,16);
-    label('ρ',x0+18,bot-16,col,16)}}},
+    arrow(cx,by,cx,by-lb,col,2);label('F_b',cx+20,by-Math.max(11,lb-7),col,16);arrow(cx,by,cx,by+FG,col,2);label('F_g',cx+20,by+FG-7,col,16);
+    label('ρ',x0+18,bot-16,col,16);ctx.globalAlpha=ga0}}},
 
  /* Conservation of angular momentum: pull the masses in and the spin speeds up */
  spin(){const R=58,om=2*Math.PI/rnd(5,6);let th=rnd(0,6.283),lt=0;
