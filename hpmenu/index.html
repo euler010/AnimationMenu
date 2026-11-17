@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Honors Physics Menu</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@500&family=STIX+Two+Text:ital@1&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@500&family=STIX+Two+Text:ital@0;1&display=swap">
 <style>
 /* Layout: a white "chalkboard in reverse" — link titles are the foreground objects drifting in a box; faint physics sketches live on a canvas behind them. Single deliberate light look. */
 :root{
@@ -57,7 +57,7 @@ const LINKS=[
  ["Honors Physics Vector Review","vector-review-hp"],
  ["Honors Physics Unit 2 Quiz 1 Review","honors-physics-unit-2-quiz-1-review"],
  ["Honors Physics Unit 2 Test 1 Review","honors-physics-unit-2-test-1-review"]];
-const SORT_AZ=false;   /* false = keep the order above (course order); true = alphabetical */
+const SORT_AZ=true;    /* true = alphabetical by title; false = keep the order above */
 const DRIFT=0.188;     /* link drift speed (1 = original speed) */
 const ROW_SPACING=50;  /* pixels from one link to the next, top to bottom, when lined up */
 const COL_GAP=48;      /* pixels between columns */
@@ -176,7 +176,10 @@ function arrow(x1,y1,x2,y2,col,lw){
 function tip(x,y,a,col,h){ctx.fillStyle=col;ctx.beginPath();ctx.moveTo(x,y);ctx.lineTo(x-h*Math.cos(a-0.45),y-h*Math.sin(a-0.45));ctx.lineTo(x-h*Math.cos(a+0.45),y-h*Math.sin(a+0.45));ctx.closePath();ctx.fill()}
 /* Text with subscripts: F_N or W_{nc} */
 function segs(t){const out=[],re=/_(?:\{([^}]+)\}|(\w))/g;let last=0,m;while((m=re.exec(t))){if(m.index>last)out.push([t.slice(last,m.index),0]);out.push([m[1]||m[2],1]);last=re.lastIndex}if(last<t.length)out.push([t.slice(last),0]);return out}
-function textW(t,sz){let w=0;for(const [s,sub] of segs(t)){ctx.font=`italic ${sub?sz*0.68:sz}px ${MATH}`;w+=ctx.measureText(s).width}return w}
+/* Numbers are set upright; letters and symbols are italic */
+const NUMRUN=/[0-9⁰¹²³₀-₉]+(?:\.[0-9]+)?|[^0-9⁰¹²³₀-₉]+/g,ISNUM=/^[0-9⁰¹²³₀-₉]/;
+const runs=s=>s.match(NUMRUN)||[],fnt=(r,fs)=>`${ISNUM.test(r)?'normal':'italic'} ${fs}px ${MATH}`;
+function textW(t,sz){let w=0;for(const [s,sub] of segs(t))for(const r of runs(s)){ctx.font=fnt(r,sub?sz*0.68:sz);w+=ctx.measureText(r).width}return w}
 /* Equation layout: text pieces, stacked fractions, and square roots over stacked fractions */
 function fracW(p,sz){const fs=sz*0.8;return Math.max(textW(p[0],fs),textW(p[1],fs))+sz*0.3}
 function partW(p,sz){if(typeof p==='string')return textW(p,sz);if(p.f)return fracW(p.f,sz)+sz*0.08;return sz*0.6+fracW(p.r,sz)+sz*0.15}
@@ -194,7 +197,7 @@ function eqDraw(eq,cx,cy,col,sz){let x=cx-eqW(eq,sz)/2;
    drawFrac(p.r,vx+sz*0.05+fw/2,fw,cy,col,sz)}
   x+=w}}
 function label(t,x,y,col,sz){sz=sz||17;ctx.fillStyle=col;ctx.textBaseline='middle';ctx.textAlign='left';let cx=x-textW(t,sz)/2;
- for(const [s,sub] of segs(t)){const fs=sub?sz*0.68:sz;ctx.font=`italic ${fs}px ${MATH}`;ctx.fillText(s,cx,y+(sub?sz*0.28:0));cx+=ctx.measureText(s).width}}
+ for(const [s,sub] of segs(t)){const fs=sub?sz*0.68:sz;for(const r of runs(s)){ctx.font=fnt(r,fs);ctx.fillText(r,cx,y+(sub?sz*0.28:0));cx+=ctx.measureText(r).width}}}
 function hatch(x1,y,x2,col,down){ctx.strokeStyle=col;ctx.lineWidth=1.5;ctx.beginPath();ctx.moveTo(x1,y);ctx.lineTo(x2,y);for(let x=x1+4;x<=x2;x+=9){ctx.moveTo(x,y);ctx.lineTo(x-6,y+(down?7:-7))}ctx.stroke()}
 function dot(x,y,r,col){ctx.fillStyle=col;ctx.beginPath();ctx.arc(x,y,r,0,6.283);ctx.fill()}
 /* A box drawn as an outline over a faint fill of the same color */
