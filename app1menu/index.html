@@ -259,18 +259,17 @@ const KINDS={
     dot(xc-r*Math.sin(ph),yc+r*Math.cos(ph),5,col);dot(xc,yc,2.5,col);
     if(Math.abs(v)>0.12){arrow(xc,yc,xc+v*44,yc,col,2);label('v_{cm}',xc+v*22,yc-r-13,col,15)}}}},
 
- /* Systems: an Atwood machine. The heavier mass starts from rest and speeds up downward; then the sketch fades and starts over */
- atwood(){const R=22,RUN=rnd(2.6,3.1),P=0.6+RUN+0.7+0.6;
-  return {w:130,h:186,life:rnd(10,14),peak:0.55,
-   draw(g,t){const col=g.col,cx=g.x+65,cy=g.y+38,yb=g.y+112,k=t%P,u=Math.max(0,Math.min(1,(k-0.6)/RUN)),s=-30+60*u*u,q=s/R;
-    const ga=ctx.globalAlpha;ctx.globalAlpha=ga*Math.min(1,k/0.5,(P-k)/0.5);
+ /* Systems: an Atwood machine. The heavier mass starts from rest just under the pulley and speeds up downward slowly,
+    reaching the bottom just as the sketch's time is up and it begins to fade away */
+ atwood(){const R=22,HALF=85,TOP=28,D=HALF-TOP;   /* HALF = half the hanging string length; TOP = closest a mass gets to the pulley's center */
+  return {w:130,h:224,life:rnd(11,14),peak:0.55,
+   draw(g,t){const col=g.col,cx=g.x+65,cy=g.y+38,yb=cy+HALF,u=Math.max(0,Math.min(1,(t-1)/(g.life-2.4))),s=-D+2*D*u*u,q=s/R;
     hatch(cx-30,g.y+8,cx+30,col,false);
     ctx.strokeStyle=col;ctx.lineWidth=1.6;ctx.lineCap='round';ctx.beginPath();ctx.moveTo(cx,g.y+8);ctx.lineTo(cx,cy);
     ctx.moveTo(cx-R,cy);ctx.lineTo(cx-R,yb+s);ctx.moveTo(cx+R,cy);ctx.lineTo(cx+R,yb-s);ctx.stroke();
     ctx.lineWidth=1.8;ctx.beginPath();ctx.arc(cx,cy,R,0,6.283);ctx.stroke();dot(cx,cy,3,col);dot(cx+13*Math.cos(q),cy+13*Math.sin(q),2.5,col);dot(cx-13*Math.cos(q),cy-13*Math.sin(q),2.5,col);
     box(cx-R-19,yb+s,38,34,col);label('m₁',cx-R,yb+s+17,col,14);box(cx+R-13,yb-s,26,22,col);label('m₂',cx+R,yb-s+11,col,13);
-    if(u>0&&u<1){arrow(g.x+13,yb+s+4,g.x+13,yb+s+30,col,1.6);label('a',g.x+13,yb+s-7,col,15);arrow(g.x+117,yb-s+24,g.x+117,yb-s-2,col,1.6);label('a',g.x+117,yb-s+35,col,15)}
-    ctx.globalAlpha=ga}}},
+    if(u>0&&u<1){arrow(g.x+13,yb+s+4,g.x+13,yb+s+30,col,1.6);label('a',g.x+13,yb+s-7,col,15);arrow(g.x+117,yb-s+24,g.x+117,yb-s-2,col,1.6);label('a',g.x+117,yb-s+35,col,15)}}}},
 
  /* Fluids, continuity: the same flow speeds up where the pipe narrows */
  bernoulli(){const Lp=300,hh=x=>34-19*ease((x-95)/60),N=240,xs=[0];
@@ -375,7 +374,7 @@ let gizmos=[],nextSpawn=1.5,nextSolo=rnd(1,SOLO_FIRST);
 function initialGizmos(){
  const sk=[...SKETCHES].sort(()=>Math.random()-0.5);
  /* Their starting ages are spread out so they fade away one at a time, not all together */
- for(let i=0;i<5;i++)spawn(sk[i],1.5+i*1.7+rnd(0,1),true);spawn('equation',rnd(1.5,3),true);spawn('equation',rnd(5,7),true);
+ for(let i=0;i<5;i++)spawn(sk[i],sk[i]==='atwood'?1.5:1.5+i*1.7+rnd(0,1),true);   /* the Atwood machine always starts from the top */spawn('equation',rnd(1.5,3),true);spawn('equation',rnd(5,7),true);
 }
 function spawn(force,age0,noCap){
  const maxG=W<520?3:W<900?5:8;
