@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Physics Dynamic Animation - Light Theme</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@800;900&family=Nunito:wght@500;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    /* Plain CSS replacing the Tailwind classes, with the same sizes and colors */
+    *, *::before, *::after { box-sizing: border-box; }
+    body, html {
+      margin: 0;
+      padding: 0;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background-color: #ffffff;
+      color: #1e293b;
+      font-family: 'Inter', sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    canvas {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      display: block;
+    }
+    button { font-family: inherit; margin: 0; cursor: pointer; line-height: 16px; }
+    .glass-panel-light {
+      background: rgba(255, 255, 255, 0.78);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid rgba(203, 213, 225, 0.8);
+      box-shadow: 0 10px 30px -5px rgba(15, 23, 42, 0.08), 0 4px 12px -2px rgba(15, 23, 42, 0.04);
+    }
+
+    /* Control deck: hidden on screens narrower than 768px */
+    #controlDeck {
+      display: none;
+      position: fixed; bottom: 16px; left: 0; right: 0; margin: 0 auto;
+      z-index: 10; width: 100%; max-width: 896px; padding: 0 16px;
+      justify-content: center;
+    }
+    @media (min-width: 768px) { #controlDeck { display: flex; } }
+    .deck-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 8px; font-size: 12px; }
+    @media (min-width: 640px) { .deck-row { gap: 10px; } }
+    .group { display: flex; align-items: center; }
+    .group.themes { gap: 6px; }
+    .group.actions { gap: 8px; }
+
+    /* Theme buttons; each keeps its own accent color */
+    .theme-btn {
+      --tc: #2563eb; --tb: #93c5fd;
+      padding: 6px 10px; border-radius: 12px; font-size: 12px; font-weight: 500;
+      background: rgba(255, 255, 255, 0.85); color: #475569; border: 1px solid #e2e8f0;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05); transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .theme-btn[data-theme="thermal"]   { --tc: #d97706; --tb: #fcd34d; }
+    .theme-btn[data-theme="celestial"] { --tc: #9333ea; --tb: #d8b4fe; }
+    .theme-btn[data-theme="electric"]  { --tc: #059669; --tb: #6ee7b7; }
+    .theme-btn:hover { background: #ffffff; color: var(--tc); }
+    .theme-btn.active { font-weight: 600; background: #ffffff; color: var(--tc); border-color: var(--tb); }
+    .theme-btn:active, .act-btn:active { transform: scale(0.95); }
+    .theme-btn:focus-visible, .act-btn:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+
+    /* Action buttons */
+    .act-btn {
+      display: flex; align-items: center; gap: 6px;
+      padding: 6px 14px; border-radius: 12px; border: 1px solid;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 12px; font-weight: 500;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+      backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+      transition: all 150ms cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    .act-btn svg { width: 14px; height: 14px; fill: currentColor; }
+    #impulseBtn { background: rgba(239, 246, 255, 0.9); color: #1d4ed8; border-color: #bfdbfe; }
+    #impulseBtn:hover { background: #dbeafe; }
+    #centripetalBtn { background: rgba(250, 245, 255, 0.9); color: #7e22ce; border-color: #e9d5ff; }
+    #centripetalBtn:hover { background: #f3e8ff; }
+    #audioToggleBtn { padding: 6px 12px; background: rgba(255, 255, 255, 0.9); color: #334155; border-color: #e2e8f0; }
+    #audioToggleBtn:hover { background: #ffffff; }
+    #audioToggleBtn.on { color: #2563eb; border-color: #93c5fd; background: #eff6ff; }
+
+    /* Notification toast */
+    #toast {
+      position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
+      padding: 8px 16px; border-radius: 12px; border-color: #bfdbfe;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+      font-size: 12px; line-height: 16px; font-weight: 500; color: #1e293b; white-space: nowrap;
+      opacity: 0; pointer-events: none; transition: opacity 300ms; z-index: 50;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Fullscreen canvas for Light-Mode AP Physics 1 animation -->
+  <canvas id="physicsCanvas"></canvas>
+
+  <!-- Bottom Control Deck (hidden on screens under 768px) -->
+  <footer id="controlDeck">
+    <div class="deck-row">
+
+      <!-- Theme Spectrum Selector Buttons -->
+      <div class="group themes">
+        <button data-theme="kinetic" class="theme-btn active">Kinetic</button>
+        <button data-theme="thermal" class="theme-btn">Thermal</button>
+        <button data-theme="celestial" class="theme-btn">Celestial</button>
+        <button data-theme="electric" class="theme-btn">Electric</button>
+      </div>
+
+      <!-- Action Toggles Placed Directly Beside Theme Buttons -->
+      <div class="group actions">
+        <button id="impulseBtn" class="act-btn">
+          <svg viewBox="0 0 24 24"><path d="M13 2.05v3.03c3.39.49 6 3.39 6 6.92 0 .9-.18 1.75-.48 2.54l2.6 1.53c.56-1.24.88-2.62.88-4.07 0-5.18-3.95-9.45-9-9.95zM12 19c-3.87 0-7-3.13-7-7 0-3.53 2.61-6.43 6-6.92V2.05c-5.06.5-9 4.76-9 9.95 0 5.52 4.47 10 9.99 10 3.31 0 6.28-1.61 8.09-4.09l-2.6-1.53C15.19 17.81 13.7 19 12 19z"/></svg>
+          Impulse Burst
+        </button>
+        <button id="centripetalBtn" class="act-btn">
+          <svg viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm-1-13h2v6h-2zm0 8h2v2h-2z"/></svg>
+          Centripetal Well
+        </button>
+        <button id="audioToggleBtn" class="act-btn">
+          <span id="audioIcon">🔇</span> Audio
+        </button>
+      </div>
+
+    </div>
+  </footer>
+
+  <!-- Notification Toast -->
+  <div id="toast" class="glass-panel-light">Mechanical Impulse Triggered</div>
+
+  <script>
+    const canvas = document.getElementById('physicsCanvas');
+    const ctx = canvas.getContext('2d');
+
+    let dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let width = window.innerWidth;
+    let height = window.innerHeight;
+
+    let time = 0;
+    const timeScale = 1.0;
+    let currentTheme = 'kinetic';
+    let soundEnabled = false;
+    let audioCtx = null;
+
+    const pointer = {
+      x: width / 2,
+      y: height / 2,
+      down: false,
+      active: false,
+      radius: 170
+    };
+
+    // Specially tuned high-contrast color sets for white background clarity
+    const colorThemes = {
+      kinetic: {
+        primary: ['#0284c7', '#2563eb', '#4f46e5', '#7c3aed', '#db2777'],
+        vectorColor: '#0284c7',
+        accent: '#e11d48'
+      },
+      thermal: {
+        primary: ['#dc2626', '#ea580c', '#d97706', '#b91c1c', '#9a3412'],
+        vectorColor: '#ea580c',
+        accent: '#e11d48'
+      },
+      celestial: {
+        primary: ['#4338ca', '#6d28d9', '#7e22ce', '#9333ea', '#be185d'],
+        vectorColor: '#7c3aed',
+        accent: '#2563eb'
+      },
+      electric: {
+        primary: ['#059669', '#0d9488', '#0284c7', '#047857', '#16a34a'],
+        vectorColor: '#059669',
+        accent: '#0284c7'
+      }
+    };
+
+    function playSciFiChirp(freq = 440, type = 'sine', duration = 0.2) {
+      if (!soundEnabled) return;
+      try {
+        if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.type = type;
+        osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(freq * 1.4, audioCtx.currentTime + duration);
+
+        gain.gain.setValueAtTime(0.04, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + duration);
+
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.start();
+        osc.stop(audioCtx.currentTime + duration);
+      } catch (e) {
+        console.error(e);
+      }
+    }
+
+    function resizeCanvas() {
+      width = window.innerWidth;
+      height = window.innerHeight;
+      dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.round(width * dpr);
+      canvas.height = Math.round(height * dpr);
+      if (ctx.resetTransform) ctx.resetTransform();
+      else ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.scale(dpr, dpr);
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    /* ---------- Math text with real subscripts and stacked fractions ----------
+       In a string, _x makes a one-letter subscript and _{net} a longer one.
+       {f:[top, bottom]} is a stacked fraction; {r:[top, bottom]} is a square root over one. */
+    const MONO = "'Nunito', 'Segoe UI', sans-serif";   // equations and labels: Nunito (Medium for equations, Bold for labels)
+    const segCache = new Map();
+    function segs(t) {
+      if (segCache.has(t)) return segCache.get(t);
+      const out = []; let buf = '', i = 0;
+      while (i < t.length) {
+        if (t[i] === '_') {
+          if (buf) { out.push([buf, 0]); buf = ''; }
+          if (t[i + 1] === '{') { const j = t.indexOf('}', i + 2); out.push([t.slice(i + 2, j), 1]); i = j + 1; }
+          else { out.push([t[i + 1], 1]); i += 2; }
+        } else { buf += t[i]; i++; }
+      }
+      if (buf) out.push([buf, 0]);
+      segCache.set(t, out);
+      return out;
+    }
+    function setFont(weight, size) { ctx.font = `${weight} ${size}px ${MONO}`; }
+    function richW(t, size, weight) {
+      let w = 0;
+      for (const [s, sub] of segs(t)) { setFont(weight, sub ? size * 0.7 : size); w += ctx.measureText(s).width; }
+      return w;
+    }
+    // Draws left-aligned text whose vertical middle is at cy; returns the x where it ends
+    function richDraw(t, x, cy, size, weight) {
+      ctx.textAlign = 'left'; ctx.textBaseline = 'middle';
+      for (const [s, sub] of segs(t)) {
+        const fs = sub ? size * 0.7 : size;
+        setFont(weight, fs);
+        ctx.fillText(s, x, cy + (sub ? size * 0.3 : 0));
+        x += ctx.measureText(s).width;
+      }
+      return x;
+    }
+    const F = (n, d) => ({ f: [n, d] });
+    const R = (n, d) => ({ r: [n, d] });
+    function fracW(p, size, weight) { return Math.max(richW(p[0], size * 0.8, weight), richW(p[1], size * 0.8, weight)) + size * 0.4; }
+    function pieceW(p, size, weight) {
+      if (typeof p === 'string') return richW(p, size, weight);
+      if (p.f) return fracW(p.f, size, weight) + size * 0.15;
+      return size * 0.65 + fracW(p.r, size, weight) + size * 0.15;
+    }
+    function eqW(eq, size, weight) { return eq.reduce((a, p) => a + pieceW(p, size, weight), 0); }
+    function drawFrac(p, cx, fw, cy, size, weight) {
+      ctx.lineWidth = Math.max(1, size * 0.06);
+      ctx.beginPath(); ctx.moveTo(cx - fw / 2 + size * 0.1, cy); ctx.lineTo(cx + fw / 2 - size * 0.1, cy); ctx.stroke();
+      const s2 = size * 0.8;
+      richDraw(p[0], cx - richW(p[0], s2, weight) / 2, cy - size * 0.48, s2, weight);
+      richDraw(p[1], cx - richW(p[1], s2, weight) / 2, cy + size * 0.52, s2, weight);
+    }
+    // Draws an equation with its left edge at x and its middle at cy, in the current fillStyle
+    function eqDraw(eq, x, cy, size, weight) {
+      ctx.strokeStyle = ctx.fillStyle; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      for (const p of eq) {
+        if (typeof p === 'string') { x = richDraw(p, x, cy, size, weight); continue; }
+        if (p.f) {
+          const fw = fracW(p.f, size, weight);
+          drawFrac(p.f, x + size * 0.075 + fw / 2, fw, cy, size, weight);
+          x += fw + size * 0.15;
+        } else {
+          const fw = fracW(p.r, size, weight), rx = x + size * 0.05, top = cy - size * 1.02, bot = cy + size * 1.0, vx = rx + size * 0.55;
+          ctx.lineWidth = Math.max(1.1, size * 0.065);
+          ctx.beginPath();
+          ctx.moveTo(rx, cy + size * 0.18); ctx.lineTo(rx + size * 0.13, cy + size * 0.06);
+          ctx.lineTo(rx + size * 0.32, bot); ctx.lineTo(vx, top); ctx.lineTo(vx + fw + size * 0.1, top);
+          ctx.stroke();
+          drawFrac(p.r, vx + size * 0.05 + fw / 2, fw, cy, size, weight);
+          x += size * 0.65 + fw + size * 0.15;
+        }
+      }
+    }
+
+    // AP Physics 1 equations, with real subscripts and stacked fractions
+    const equationsList = [
+      ['v = v_0 + at'],
+      ['x = x_0 + v_0t + ', F('1', '2'), 'at²'],
+      ['v² = v_0² + 2a(x − x_0)'],
+      ['v_x = v_{x0} + a_xt'],
+      ['x = x_0 + v_{x0}t + ', F('1', '2'), 'a_xt²'],
+      ['v_x² = v_{x0}² + 2a_x(x − x_0)'],
+      ['ΣF = ma'],
+      ['F_f ≤ μ_sF_N'],
+      ['F_f = μ_kF_N'],
+      ['a_c = ', F('v²', 'r')],
+      ['p = mv'],
+      ['Δp = F_{net}Δt = J'],
+      ['K = ', F('1', '2'), 'mv²'],
+      ['ΔU_g = mgΔy'],
+      ['W = Fd cos θ'],
+      ['P = ', F('ΔE', 'Δt')],
+      ['θ = θ_0 + ω_0t + ', F('1', '2'), 'αt²'],
+      ['ω = ω_0 + αt'],
+      ['Στ = Iα'],
+      ['τ = rF sin θ'],
+      ['L = Iω'],
+      ['ΔL = τΔt'],
+      ['K_{rot} = ', F('1', '2'), 'Iω²'],
+      ['F_s = −kx'],
+      ['U_s = ', F('1', '2'), 'kx²'],
+      ['T_s = 2π', R('m', 'k')],
+      ['T_p = 2π', R('L', 'g')],
+      ['T = ', F('1', 'f')],
+      ['F_g = ', F('Gm_1m_2', 'r²')],
+      ['U_G = −', F('Gm_1m_2', 'r')]
+    ];
+
+    class FloatingEquation {
+      constructor() {
+        this.reset(true);
+      }
+      reset(init = false) {
+        this.eq = equationsList[Math.floor(Math.random() * equationsList.length)];
+        this.fontSize = 13 + Math.floor(Math.random() * 8);
+        this.w = eqW(this.eq, this.fontSize, 500);
+        this.x = 10 + Math.random() * Math.max(0, width - this.w - 20);
+        this.vx = (Math.random() - 0.5) * 0.45;
+        if (init) {
+          this.y = 20 + Math.random() * Math.max(0, height - 40);
+          this.vy = (Math.random() - 0.5) * 0.35;
+        } else {
+          // Enter from the top or bottom edge, always moving onto the screen
+          const fromTop = Math.random() > 0.5;
+          this.y = fromTop ? -30 : height + 30;
+          const speed = 0.08 + Math.random() * 0.12;
+          this.vy = fromTop ? speed : -speed;
+        }
+        this.alpha = 0;
+        this.maxAlpha = 0.45 + Math.random() * 0.35;
+        this.fadeIn = true;
+        this.life = 0;
+        this.maxLife = 320 + Math.random() * 380;
+        this.colorIdx = Math.floor(Math.random() * 5);
+      }
+      update(dt) {
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        this.life += dt;
+
+        if (pointer.active) {
+          const dx = this.x + this.w / 2 - pointer.x;
+          const dy = this.y - pointer.y;
+          const dist = Math.hypot(dx, dy);
+          if (dist < 130 && dist > 0.5) {
+            this.x += (dx / dist) * 1.6 * dt;
+            this.y += (dy / dist) * 1.6 * dt;
+          }
+        }
+
+        // Once it has drifted fully off the screen, start a new one instead of wasting its life
+        const off = this.x > width + 40 || this.x + this.w < -40 || this.y < -80 || this.y > height + 80;
+        if (off && !this.fadeIn) { this.reset(); return; }
+
+        if (this.fadeIn) {
+          this.alpha += 0.01 * dt;
+          if (this.alpha >= this.maxAlpha) {
+            this.alpha = this.maxAlpha;
+            this.fadeIn = false;
+          }
+        } else if (this.life > this.maxLife - 60) {
+          this.alpha -= 0.012 * dt;
+          if (this.alpha <= 0) {
+            this.reset();
+          }
+        }
+      }
+      draw() {
+        if (this.alpha <= 0.01) return;
+        ctx.save();
+        ctx.fillStyle = colorThemes[currentTheme].primary[this.colorIdx];
+        ctx.globalAlpha = this.alpha;
+        eqDraw(this.eq, this.x, this.y, this.fontSize, 500);
+        ctx.restore();
+      }
+    }
+
+    // Helper for crisp high-contrast vector arrows (labels may use _ for subscripts)
+    function drawVectorArrow(fromX, fromY, toX, toY, color, label = '', alpha = 1) {
+      const headlen = 7;
+      const angle = Math.atan2(toY - fromY, toX - fromX);
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.strokeStyle = color;
+      ctx.fillStyle = color;
+      ctx.lineWidth = 1.8;
+
+      ctx.beginPath();
+      ctx.moveTo(fromX, fromY);
+      ctx.lineTo(toX, toY);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(toX, toY);
+      ctx.lineTo(toX - headlen * Math.cos(angle - Math.PI / 6), toY - headlen * Math.sin(angle - Math.PI / 6));
+      ctx.lineTo(toX - headlen * Math.cos(angle + Math.PI / 6), toY - headlen * Math.sin(angle + Math.PI / 6));
+      ctx.closePath();
+      ctx.fill();
+
+      if (label) {
+        const lx = toX + Math.cos(angle) * 11, ly = toY + Math.sin(angle) * 11;
+        richDraw(label, lx - richW(label, 11, 'bold') / 2, ly, 11, 'bold');
+      }
+      ctx.restore();
+    }
+
+    class FreeBodyDiagram {
+      constructor() {
+        this.reset();
+      }
+      reset() {
+        this.x = 80 + Math.random() * (width - 160);
+        this.y = 80 + Math.random() * (height - 160);
+        this.vx = (Math.random() - 0.5) * 0.5;
+        this.vy = (Math.random() - 0.5) * 0.5;
+        this.size = 28 + Math.random() * 12;
+        this.life = 0;
+        this.maxLife = 360 + Math.random() * 240;
+        this.alpha = 0;
+        this.color = colorThemes[currentTheme].primary[Math.floor(Math.random() * 5)];
+        this.fnLength = 34 + Math.random() * 18;
+        this.fgLength = this.fnLength;
+        this.faLength = 26 + Math.random() * 22;
+        // The block moves at constant velocity, so the net force is zero: kinetic friction balances the applied force
+        this.ffLength = this.faLength;
+      }
+      update(dt) {
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        this.life += dt;
+
+        if (this.x < 50) this.vx = Math.abs(this.vx);
+        if (this.x > width - 50) this.vx = -Math.abs(this.vx);
+        if (this.y < 50) this.vy = Math.abs(this.vy);
+        if (this.y > height - 50) this.vy = -Math.abs(this.vy);
+
+        if (this.life < 40) this.alpha = this.life / 40;
+        else if (this.life > this.maxLife - 40) this.alpha = Math.max(0, (this.maxLife - this.life) / 40);
+        else this.alpha = 0.9;
+
+        if (this.life >= this.maxLife) this.reset();
+      }
+      draw() {
+        if (this.alpha <= 0.01) return;
+        ctx.save();
+        ctx.globalAlpha = this.alpha;
+
+        // Mass block in clean laboratory white styling with light shadow
+        ctx.shadowColor = 'rgba(15, 23, 42, 0.12)';
+        ctx.shadowBlur = 8;
+        ctx.fillStyle = '#ffffff';
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 2;
+        ctx.fillRect(this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
+        ctx.strokeRect(this.x - this.size / 2, this.y - this.size / 2, this.size, this.size);
+
+        ctx.shadowBlur = 0;
+        ctx.font = "bold 11px 'Nunito', 'Segoe UI', sans-serif";
+        ctx.fillStyle = '#0f172a';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText("m", this.x, this.y);
+
+        // Free-body diagram: normal force, gravity, applied force, friction
+        const vCol = colorThemes[currentTheme].vectorColor;
+        drawVectorArrow(this.x, this.y - this.size / 2, this.x, this.y - this.size / 2 - this.fnLength, vCol, 'F_N', this.alpha);
+        drawVectorArrow(this.x, this.y + this.size / 2, this.x, this.y + this.size / 2 + this.fgLength, '#dc2626', 'mg', this.alpha);
+        drawVectorArrow(this.x + this.size / 2, this.y, this.x + this.size / 2 + this.faLength, this.y, '#16a34a', 'F_a', this.alpha);
+        drawVectorArrow(this.x - this.size / 2, this.y, this.x - this.size / 2 - this.ffLength, this.y, '#d97706', 'F_f', this.alpha);
+
+        ctx.restore();
+      }
+    }
+
+    class SpringOscillator {
+      constructor() {
+        this.reset();
+      }
+      reset() {
+        this.restLength = 70 + Math.random() * 40;
+        this.amplitude = 24 + Math.random() * 18;
+        // Fixed anchor, placed so the whole spring stays on screen at full stretch
+        const reach = this.restLength + this.amplitude + 12;
+        for (let tries = 0; tries < 30; tries++) {
+          this.anchorX = 40 + Math.random() * Math.max(0, width - 80);
+          this.anchorY = 40 + Math.random() * Math.max(0, height - 80);
+          this.angle = Math.random() * Math.PI * 2;
+          const ex = this.anchorX + Math.cos(this.angle) * reach, ey = this.anchorY + Math.sin(this.angle) * reach;
+          if (ex > 20 && ex < width - 20 && ey > 20 && ey < height - 20) break;
+        }
+        this.freq = 0.05 + Math.random() * 0.04;
+        this.phase = Math.random() * Math.PI * 2;
+        this.life = 0;
+        this.maxLife = 380 + Math.random() * 200;
+        this.alpha = 0;
+        this.color = colorThemes[currentTheme].primary[Math.floor(Math.random() * 5)];
+      }
+      update(dt) {
+        this.life += dt;
+        this.phase += this.freq * dt;
+
+        if (this.life < 40) this.alpha = this.life / 40;
+        else if (this.life > this.maxLife - 40) this.alpha = Math.max(0, (this.maxLife - this.life) / 40);
+        else this.alpha = 0.9;
+
+        if (this.life >= this.maxLife) this.reset();
+      }
+      draw() {
+        if (this.alpha <= 0.01) return;
+        const currentLength = this.restLength + Math.sin(this.phase) * this.amplitude;
+        const endX = this.anchorX + Math.cos(this.angle) * currentLength;
+        const endY = this.anchorY + Math.sin(this.angle) * currentLength;
+
+        ctx.save();
+        ctx.globalAlpha = this.alpha;
+
+        // Draw spring anchor
+        ctx.fillStyle = '#64748b';
+        ctx.beginPath();
+        ctx.arc(this.anchorX, this.anchorY, 4.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Draw coiled spring line (Hooke's Law: Fs = -kx)
+        const coils = 11;
+        ctx.beginPath();
+        ctx.strokeStyle = this.color;
+        ctx.lineWidth = 2;
+        ctx.moveTo(this.anchorX, this.anchorY);
+
+        const perpX = -Math.sin(this.angle);
+        const perpY = Math.cos(this.angle);
+
+        for (let i = 1; i <= coils; i++) {
+          const frac = i / (coils + 1);
+          const cx = this.anchorX + Math.cos(this.angle) * currentLength * frac;
+          const cy = this.anchorY + Math.sin(this.angle) * currentLength * frac;
+          const offset = (i % 2 === 0 ? 8 : -8);
+          ctx.lineTo(cx + perpX * offset, cy + perpY * offset);
+        }
+        ctx.lineTo(endX, endY);
+        ctx.stroke();
+
+        // Attached mass m with shadow
+        ctx.shadowColor = 'rgba(15, 23, 42, 0.15)';
+        ctx.shadowBlur = 6;
+        ctx.fillStyle = '#0284c7';
+        ctx.beginPath();
+        ctx.arc(endX, endY, 8.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Restoring force vector: Fs = -kx
+        ctx.shadowBlur = 0;
+        const disp = endX - (this.anchorX + Math.cos(this.angle) * this.restLength);
+        const dispY = endY - (this.anchorY + Math.sin(this.angle) * this.restLength);
+        drawVectorArrow(endX, endY, endX - disp * 0.9, endY - dispY * 0.9, '#dc2626', 'F_s', this.alpha * 0.85);
+
+        ctx.restore();
+      }
+    }
+
+    class ProjectileTrajectory {
+      constructor() {
+        this.reset();
+      }
+      reset() {
+        // Choose the range and peak height to fit the screen, then solve for the launch velocity and g
+        const T = 60 + Math.random() * 40;
+        this.tFlight = T;
+        this.originY = height * (0.6 + Math.random() * 0.25);
+        let range = width * (0.35 + Math.random() * 0.3);
+        range = Math.max(Math.min(range, width - 80), Math.min(160, width - 60));
+        this.originX = 30 + Math.random() * Math.max(0, width - 60 - range);
+        const peak = Math.max(40, Math.min(height * (0.25 + Math.random() * 0.2), this.originY - 40));
+        this.vx = range / T;
+        this.vy0 = -4 * peak / T;
+        this.g = 8 * peak / (T * T);
+        this.arrowScale = 45 / Math.hypot(this.vx, this.vy0);
+        this.progress = 0;
+        this.alpha = 0;
+        this.life = 0;
+        this.color = colorThemes[currentTheme].primary[Math.floor(Math.random() * 5)];
+      }
+      update(dt) {
+        this.life += dt;
+        this.progress += 0.45 * dt;
+
+        if (this.life < 20) this.alpha = this.life / 20;
+        else if (this.progress > this.tFlight) this.alpha = Math.max(0, 1 - (this.progress - this.tFlight) / 20);
+        else this.alpha = 0.85;
+
+        if (this.progress > this.tFlight + 20) this.reset();
+      }
+      draw() {
+        if (this.alpha <= 0.01) return;
+        ctx.save();
+        ctx.globalAlpha = this.alpha;
+
+        // Parabolic trajectory path in soft slate
+        ctx.beginPath();
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = 'rgba(100, 116, 139, 0.4)';
+        ctx.lineWidth = 1.4;
+        ctx.moveTo(this.originX, this.originY);
+        for (let t = 0; t <= this.tFlight; t += 1) {
+          ctx.lineTo(this.originX + this.vx * t, this.originY + this.vy0 * t + 0.5 * this.g * t * t);
+        }
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Projectile position at current t
+        const t = Math.min(this.tFlight, this.progress);
+        const posX = this.originX + this.vx * t;
+        const posY = this.originY + this.vy0 * t + 0.5 * this.g * t * t;
+        const k = this.arrowScale;
+        const vxA = this.vx * k, vyA = (this.vy0 + this.g * t) * k;
+
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(posX, posY, 5.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Velocity and its horizontal and vertical components
+        drawVectorArrow(posX, posY, posX + vxA, posY, '#0284c7', 'v_x', this.alpha * 0.75);
+        if (Math.abs(vyA) > 3) drawVectorArrow(posX, posY, posX, posY + vyA, '#dc2626', 'v_y', this.alpha * 0.75);
+        drawVectorArrow(posX, posY, posX + vxA, posY + vyA, '#059669', 'v', this.alpha * 0.95);
+
+        ctx.restore();
+      }
+    }
+
+    class SimplePendulum {
+      constructor() {
+        this.reset();
+      }
+      reset() {
+        this.anchorX = 100 + Math.random() * (width - 200);
+        this.anchorY = 50 + Math.random() * (height * 0.3);
+        this.length = 70 + Math.random() * 50;
+        this.maxTheta = 0.45 + Math.random() * 0.35;
+        this.freq = Math.sqrt(0.4 / this.length) * 1.8;
+        this.phase = Math.random() * Math.PI * 2;
+        this.life = 0;
+        this.maxLife = 350 + Math.random() * 200;
+        this.alpha = 0;
+        this.color = colorThemes[currentTheme].primary[Math.floor(Math.random() * 5)];
+      }
+      update(dt) {
+        this.life += dt;
+        this.phase += this.freq * dt;
+
+        if (this.life < 30) this.alpha = this.life / 30;
+        else if (this.life > this.maxLife - 30) this.alpha = Math.max(0, (this.maxLife - this.life) / 30);
+        else this.alpha = 0.85;
+
+        if (this.life >= this.maxLife) this.reset();
+      }
+      draw() {
+        if (this.alpha <= 0.01) return;
+        const theta = Math.sin(this.phase) * this.maxTheta;
+        const bobX = this.anchorX + Math.sin(theta) * this.length;
+        const bobY = this.anchorY + Math.cos(theta) * this.length;
+
+        ctx.save();
+        ctx.globalAlpha = this.alpha;
+
+        // Pivot point
+        ctx.fillStyle = '#475569';
+        ctx.beginPath();
+        ctx.arc(this.anchorX, this.anchorY, 3.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Rod/String
+        ctx.strokeStyle = 'rgba(71, 85, 105, 0.45)';
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(this.anchorX, this.anchorY);
+        ctx.lineTo(bobX, bobY);
+        ctx.stroke();
+
+        // Bob with soft shadow
+        ctx.shadowColor = 'rgba(15, 23, 42, 0.15)';
+        ctx.shadowBlur = 6;
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(bobX, bobY, 7.5, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Tension and gravity: T = mg(3 cos θ − 2 cos θmax), largest at the bottom, mg cos θmax at the ends
+        ctx.shadowBlur = 0;
+        const MG = 30;
+        const tLen = MG * (3 * Math.cos(theta) - 2 * Math.cos(this.maxTheta));
+        drawVectorArrow(bobX, bobY, bobX - Math.sin(theta) * tLen, bobY - Math.cos(theta) * tLen, '#0284c7', 'T', this.alpha * 0.85);
+        drawVectorArrow(bobX, bobY, bobX, bobY + MG, '#dc2626', 'mg', this.alpha * 0.85);
+
+        ctx.restore();
+      }
+    }
+
+    class MomentumCollider {
+      constructor(once = false) {
+        this.once = once;   // one-time pairs (from the Impulse button) are removed when they finish
+        this.dead = false;
+        this.reset();
+      }
+      reset() {
+        this.y = 80 + Math.random() * (height - 160);
+        this.m1 = 1 + Math.floor(Math.random() * 3);
+        this.m2 = 1 + Math.floor(Math.random() * 3);
+        this.r1 = 8 + this.m1 * 2;
+        this.r2 = 8 + this.m2 * 2;
+        this.x1 = 40;
+        this.x2 = width - 40;
+        this.v1 = (2 + Math.random() * 2);
+        this.v2 = -(2 + Math.random() * 2);
+        this.collided = false;
+        this.life = 0;
+        // Live long enough to reach each other on any screen width, then show the rebound
+        const meet = Math.max(0, this.x2 - this.x1 - this.r1 - this.r2) / (this.v1 - this.v2);
+        this.maxLife = meet + 150;
+        this.alpha = 0;
+        this.color1 = '#0284c7';
+        this.color2 = '#dc2626';
+      }
+      update(dt) {
+        this.life += dt;
+        this.x1 += this.v1 * dt;
+        this.x2 += this.v2 * dt;
+
+        // 1D elastic collision when the balls touch (checked by gap, so a slow frame can't skip it)
+        if (!this.collided && this.x2 - this.x1 <= this.r1 + this.r2) {
+          this.collided = true;
+          const u1 = this.v1;
+          const u2 = this.v2;
+          this.v1 = ((this.m1 - this.m2) / (this.m1 + this.m2)) * u1 + ((2 * this.m2) / (this.m1 + this.m2)) * u2;
+          this.v2 = ((2 * this.m1) / (this.m1 + this.m2)) * u1 + ((this.m2 - this.m1) / (this.m1 + this.m2)) * u2;
+          // Undo any overlap from this frame
+          const over = this.r1 + this.r2 - (this.x2 - this.x1);
+          if (over > 0) { this.x1 -= over / 2; this.x2 += over / 2; }
+          playSciFiChirp(420, 'square', 0.1);
+        }
+
+        if (this.life < 30) this.alpha = this.life / 30;
+        else if (this.life > this.maxLife - 30) this.alpha = Math.max(0, (this.maxLife - this.life) / 30);
+        else this.alpha = 0.85;
+
+        if (this.life >= this.maxLife) {
+          if (this.once) this.dead = true;
+          else this.reset();
+        }
+      }
+      draw() {
+        if (this.alpha <= 0.01) return;
+        ctx.save();
+        ctx.globalAlpha = this.alpha;
+
+        // Track plane
+        ctx.setLineDash([3, 3]);
+        ctx.strokeStyle = 'rgba(148, 163, 184, 0.4)';
+        ctx.beginPath();
+        ctx.moveTo(0, this.y);
+        ctx.lineTo(width, this.y);
+        ctx.stroke();
+        ctx.setLineDash([]);
+
+        // Momentum arrows are scaled by p = mv, so heavier balls get longer arrows at the same speed
+        const PS = 6;
+        ctx.fillStyle = this.color1;
+        ctx.beginPath();
+        ctx.arc(this.x1, this.y, this.r1, 0, Math.PI * 2);
+        ctx.fill();
+        drawVectorArrow(this.x1, this.y, this.x1 + this.m1 * this.v1 * PS, this.y, this.color1, 'p_1', this.alpha);
+
+        ctx.fillStyle = this.color2;
+        ctx.beginPath();
+        ctx.arc(this.x2, this.y, this.r2, 0, Math.PI * 2);
+        ctx.fill();
+        drawVectorArrow(this.x2, this.y, this.x2 + this.m2 * this.v2 * PS, this.y, this.color2, 'p_2', this.alpha);
+
+        ctx.restore();
+      }
+    }
+
+    class Spark {
+      constructor(x, y, color) {
+        this.x = x;
+        this.y = y;
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 2 + Math.random() * 6;
+        this.vx = Math.cos(angle) * speed;
+        this.vy = Math.sin(angle) * speed;
+        this.alpha = 1;
+        this.color = color || colorThemes[currentTheme].primary[Math.floor(Math.random() * 5)];
+        this.size = 1.8 + Math.random() * 2.2;
+        this.decay = 0.018 + Math.random() * 0.025;
+      }
+      update(dt) {
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        this.vx *= 0.98;
+        this.vy *= 0.98;
+        this.alpha -= this.decay * dt;
+      }
+      draw() {
+        if (this.alpha <= 0) return;
+        ctx.save();
+        ctx.globalAlpha = Math.max(0, this.alpha);
+        ctx.fillStyle = this.color;
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, this.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    function drawCoordinateGrid(t) {
+      const gridSize = Math.max(45, Math.floor(width / 24));
+      ctx.save();
+      ctx.lineWidth = 0.6;
+      ctx.strokeStyle = 'rgba(148, 163, 184, 0.22)';
+
+      const centerX = width / 2;
+      const centerY = height / 2;
+
+      for (let x = 0; x < width; x += gridSize) {
+        ctx.beginPath();
+        for (let y = 0; y < height; y += 15) {
+          const dToCenter = Math.hypot(x - centerX, y - centerY);
+          const warp = Math.sin(dToCenter * 0.016 - t * 1.5) * 3.5;
+
+          let pWarpX = 0;
+          if (pointer.active) {
+            const dp = Math.hypot(x - pointer.x, y - pointer.y);
+            if (dp < pointer.radius) {
+              const f = (1 - dp / pointer.radius);
+              pWarpX = Math.cos(t * 3 + dp * 0.05) * f * 12;
+            }
+          }
+
+          const drawX = x + warp + pWarpX;
+          const drawY = y;
+          if (y === 0) ctx.moveTo(drawX, drawY);
+          else ctx.lineTo(drawX, drawY);
+        }
+        ctx.stroke();
+      }
+
+      for (let y = 0; y < height; y += gridSize) {
+        ctx.beginPath();
+        for (let x = 0; x < width; x += 15) {
+          const dToCenter = Math.hypot(x - centerX, y - centerY);
+          const warp = Math.cos(dToCenter * 0.016 - t * 1.5) * 3.5;
+
+          let pWarpY = 0;
+          if (pointer.active) {
+            const dp = Math.hypot(x - pointer.x, y - pointer.y);
+            if (dp < pointer.radius) {
+              const f = (1 - dp / pointer.radius);
+              pWarpY = Math.sin(t * 3 + dp * 0.05) * f * 12;
+            }
+          }
+
+          const drawX = x;
+          const drawY = y + warp + pWarpY;
+          if (x === 0) ctx.moveTo(drawX, drawY);
+          else ctx.lineTo(drawX, drawY);
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    // High-visibility 3D isometric letters crafted for bright white backgrounds
+    function drawPhysicsBlockLetters(t) {
+      const text = "PHYSICS";
+      ctx.save();
+
+      let baseFontSize = Math.min(width / 7.2, height / 4.8);
+      baseFontSize = Math.max(48, Math.min(baseFontSize, 180));
+
+      ctx.font = `900 ${baseFontSize}px 'Orbitron', 'Inter', sans-serif`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+
+      const centerX = width / 2;
+      const centerY = height / 2;
+
+      const theme = colorThemes[currentTheme];
+      const colors = theme.primary;
+
+      // 3D Block Layering effect (isometric extrusion shadow for light background)
+      const depthLayers = 14;
+      const extrudeAngle = Math.PI / 4 + Math.sin(t * 0.5) * 0.12;
+      const extrudeDist = Math.min(18, baseFontSize * 0.12);
+
+      // Deep dimensional cast shadow
+      for (let d = depthLayers; d > 0; d--) {
+        const factor = d / depthLayers;
+        const offX = Math.cos(extrudeAngle) * extrudeDist * factor;
+        const offY = Math.sin(extrudeAngle) * extrudeDist * factor;
+
+        ctx.fillStyle = `rgba(148, 163, 184, ${0.14 * (1 - factor * 0.3)})`;
+        ctx.fillText(text, centerX + offX, centerY + offY);
+      }
+
+      // Colored extruded edge layers
+      for (let d = 5; d > 0; d--) {
+        const factor = d / 5;
+        const offX = Math.cos(extrudeAngle) * (extrudeDist * 0.6) * factor;
+        const offY = Math.sin(extrudeAngle) * (extrudeDist * 0.6) * factor;
+
+        const colorIndex = Math.floor((t * 0.5 + d) % colors.length);
+        ctx.fillStyle = colors[colorIndex];
+        ctx.globalAlpha = 0.16;
+        ctx.fillText(text, centerX + offX, centerY + offY);
+      }
+
+      // Letter-by-letter rendering for chromatic phase shifting
+      const totalWidth = ctx.measureText(text).width;
+      let curX = centerX - totalWidth / 2;
+
+      for (let i = 0; i < text.length; i++) {
+        const char = text[i];
+        const charWidth = ctx.measureText(char).width;
+        const letterCenterX = curX + charWidth / 2;
+
+        const floatOffset = Math.sin(t * 2.2 + i * 0.8) * (baseFontSize * 0.04);
+        const letterY = centerY + floatOffset;
+
+        const grad = ctx.createLinearGradient(
+          letterCenterX - charWidth / 2,
+          letterY - baseFontSize / 2,
+          letterCenterX + charWidth / 2,
+          letterY + baseFontSize / 2
+        );
+
+        const c1Index = Math.floor((t * 0.8 + i) % colors.length);
+        const c2Index = (c1Index + 1) % colors.length;
+        const c3Index = (c1Index + 2) % colors.length;
+
+        grad.addColorStop(0, colors[c1Index]);
+        grad.addColorStop(0.5, colors[c2Index]);
+        grad.addColorStop(1, colors[c3Index]);
+
+        // Soft vibrant halo behind letter
+        ctx.save();
+        ctx.globalAlpha = 0.25;
+        ctx.shadowColor = colors[c1Index];
+        ctx.shadowBlur = 24 + Math.sin(t * 3 + i) * 8;
+        ctx.fillStyle = colors[c1Index];
+        ctx.fillText(char, letterCenterX, letterY);
+        ctx.restore();
+
+        // Main face gradient
+        ctx.save();
+        ctx.globalAlpha = 0.98;
+        ctx.fillStyle = grad;
+        ctx.fillText(char, letterCenterX, letterY);
+        ctx.restore();
+
+        // Crisp dark outline border for supreme definition against the white canvas
+        ctx.save();
+        ctx.lineWidth = Math.max(2, baseFontSize * 0.02);
+        ctx.strokeStyle = 'rgba(15, 23, 42, 0.82)';
+        ctx.strokeText(char, letterCenterX, letterY);
+        ctx.restore();
+
+        // Specular sweep across the letters
+        const sweepProgress = (Math.sin(t * 1.5 - i * 0.3) + 1) / 2;
+        if (sweepProgress > 0.42 && sweepProgress < 0.58) {
+          ctx.save();
+          ctx.globalAlpha = (1 - Math.abs(sweepProgress - 0.5) * 12.5) * 0.8;
+          ctx.fillStyle = '#ffffff';
+          ctx.fillText(char, letterCenterX, letterY);
+          ctx.restore();
+        }
+
+        curX += charWidth;
+      }
+
+      ctx.restore();
+    }
+
+    const equations = [];
+    const fbds = [];
+    const springs = [];
+    const projectiles = [];
+    const pendulums = [];
+    let colliders = [];
+    let sparks = [];
+
+    for (let i = 0; i < 11; i++) equations.push(new FloatingEquation());
+    for (let i = 0; i < 4; i++) fbds.push(new FreeBodyDiagram());
+    for (let i = 0; i < 4; i++) springs.push(new SpringOscillator());
+    for (let i = 0; i < 3; i++) projectiles.push(new ProjectileTrajectory());
+    for (let i = 0; i < 4; i++) pendulums.push(new SimplePendulum());
+    for (let i = 0; i < 2; i++) colliders.push(new MomentumCollider());
+
+    function triggerImpulseWarp(x, y) {
+      playSciFiChirp(320 + Math.random() * 280, 'triangle', 0.25);
+      for (let i = 0; i < 35; i++) {
+        sparks.push(new Spark(x, y));
+      }
+    }
+
+    let toastTimer = null;
+    function showToast(html) {
+      const toast = document.getElementById('toast');
+      toast.innerHTML = html;
+      toast.style.opacity = '1';
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { toast.style.opacity = '0'; }, 2000);
+    }
+
+    window.addEventListener('pointermove', (e) => {
+      pointer.x = e.clientX;
+      pointer.y = e.clientY;
+      pointer.active = true;
+
+      if (Math.random() < 0.2) {
+        sparks.push(new Spark(pointer.x, pointer.y));
+      }
+    });
+
+    window.addEventListener('pointerdown', (e) => {
+      if (e.target.closest('footer') || e.target.closest('header')) return;
+      pointer.down = true;
+      pointer.x = e.clientX;
+      pointer.y = e.clientY;
+      triggerImpulseWarp(e.clientX, e.clientY);
+    });
+
+    // Turn off the pointer effects when the mouse leaves the page, the window loses focus, or a touch ends
+    window.addEventListener('pointerup', (e) => { pointer.down = false; if (e.pointerType !== 'mouse') pointer.active = false; });
+    document.addEventListener('pointerout', (e) => { if (!e.relatedTarget) pointer.active = false; });
+    document.documentElement.addEventListener('mouseleave', () => { pointer.active = false; });
+    window.addEventListener('blur', () => { pointer.active = false; });
+    window.addEventListener('touchend', () => { pointer.active = false; }, { passive: true });
+
+    window.addEventListener('touchmove', (e) => {
+      if (e.touches.length > 0) {
+        pointer.x = e.touches[0].clientX;
+        pointer.y = e.touches[0].clientY;
+        pointer.active = true;
+      }
+    }, { passive: true });
+
+    document.querySelectorAll('.theme-btn').forEach(btn => {
+      btn.addEventListener('click', () => {
+        document.querySelectorAll('.theme-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+        currentTheme = btn.dataset.theme;
+        playSciFiChirp(520, 'sine', 0.15);
+        showToast(`Spectrum: ${currentTheme.toUpperCase()}`);
+      });
+    });
+
+    document.getElementById('impulseBtn').addEventListener('click', () => {
+      triggerImpulseWarp(width / 2, height / 2);
+      // One extra collision per click, removed when it finishes; at most 4 extra at a time
+      if (colliders.filter(c => c.once).length < 4) colliders.push(new MomentumCollider(true));
+      showToast("Momentum Impulse Applied: J = Δp");
+    });
+
+    document.getElementById('centripetalBtn').addEventListener('click', () => {
+      playSciFiChirp(180, 'sawtooth', 0.4);
+      showToast("Centripetal Acceleration Well: a<sub>c</sub> = v²/r");
+      for (let i = 0; i < 40; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const rad = 140 + Math.random() * 180;
+        const sp = new Spark(width / 2 + Math.cos(angle) * rad, height / 2 + Math.sin(angle) * rad);
+        sp.vx = -Math.cos(angle) * 3.8;
+        sp.vy = -Math.sin(angle) * 3.8;
+        sparks.push(sp);
+      }
+    });
+
+    const audioBtn = document.getElementById('audioToggleBtn');
+    const audioIcon = document.getElementById('audioIcon');
+    if (audioBtn) {
+      audioBtn.addEventListener('click', () => {
+        soundEnabled = !soundEnabled;
+        audioBtn.classList.toggle('on', soundEnabled);
+        if (soundEnabled) {
+          audioIcon.innerText = '🔊';
+          playSciFiChirp(440, 'sine', 0.2);
+          showToast("Audio Resonance Enabled");
+        } else {
+          audioIcon.innerText = '🔇';
+          showToast("Audio Muted");
+        }
+      });
+    }
+
+    let lastTimestamp = performance.now();
+
+    function animate(now) {
+      requestAnimationFrame(animate);
+
+      const rawDt = Math.max(0, (now - lastTimestamp) / 1000);
+      lastTimestamp = now;
+      const dt = Math.min(rawDt, 0.1) * 60 * timeScale;
+      time += Math.min(rawDt, 0.1) * timeScale;
+
+      // Trail wash for pure white background (#ffffff)
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.32)';
+      ctx.fillRect(0, 0, width, height);
+
+      // 1. Background Grid in light slate
+      drawCoordinateGrid(time);
+
+      // 2. AP Physics 1 Floating Equations
+      equations.forEach(eq => {
+        eq.update(dt);
+        eq.draw();
+      });
+
+      // 3. AP Physics 1 Animations: Springs, Projectiles, Pendulums
+      springs.forEach(sp => {
+        sp.update(dt);
+        sp.draw();
+      });
+
+      projectiles.forEach(p => {
+        p.update(dt);
+        p.draw();
+      });
+
+      pendulums.forEach(pen => {
+        pen.update(dt);
+        pen.draw();
+      });
+
+      // 4. Centerpiece 3D Block Word 'PHYSICS'
+      drawPhysicsBlockLetters(time);
+
+      // 5. AP Physics 1 Free-Body Diagrams & Momentum Colliders orbiting the text
+      fbds.forEach(fbd => {
+        fbd.update(dt);
+        fbd.draw();
+      });
+
+      colliders.forEach(col => {
+        col.update(dt);
+        col.draw();
+      });
+      colliders = colliders.filter(c => !c.dead);
+
+      // 6. Interactive Impulse Sparks
+      for (let i = sparks.length - 1; i >= 0; i--) {
+        const s = sparks[i];
+        s.update(dt);
+        s.draw();
+        if (s.alpha <= 0) sparks.splice(i, 1);
+      }
+
+      // Orbital Centripetal Trajectory Paths around "PHYSICS"
+      ctx.save();
+      ctx.strokeStyle = colorThemes[currentTheme].primary[0];
+      ctx.globalAlpha = 0.12 + Math.sin(time * 2) * 0.05;
+      ctx.lineWidth = 1.2;
+      for (let k = 1; k <= 3; k++) {
+        ctx.beginPath();
+        const rX = (width * 0.38) * (k / 3);
+        const rY = (height * 0.28) * (k / 3);
+        ctx.ellipse(width / 2, height / 2, rX, rY, Math.sin(time * 0.35) * 0.2, 0, Math.PI * 2);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    window.onload = function() {
+      resizeCanvas();
+      lastTimestamp = performance.now();
+      requestAnimationFrame(animate);
+    };
+  </script>
+</body>
+</html>
