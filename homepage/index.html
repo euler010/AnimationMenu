@@ -1013,6 +1013,7 @@
        Smaller screens get fewer in proportion to their area, but never fewer than MIN_COUNT.
        Larger screens keep the full count. */
     const REFERENCE_WIDTH = 2560, REFERENCE_HEIGHT = 1300;
+    const AMOUNT = 1.5;   // multiplies every count below on every screen (1 = the original amounts)
     const GROUPS = [
       { name: 'equations',   list: equations,   make: () => new FloatingEquation(),     FULL_COUNT: 11, MIN_COUNT: 4 },
       { name: 'fbds',        list: fbds,        make: () => new FreeBodyDiagram(),      FULL_COUNT: 4,  MIN_COUNT: 1 },
@@ -1022,7 +1023,7 @@
       { name: 'colliders',   list: colliders,   make: () => new MomentumCollider(),     FULL_COUNT: 2,  MIN_COUNT: 1 }
     ];
     function screenShare() { return Math.min(1, (width * height) / (REFERENCE_WIDTH * REFERENCE_HEIGHT)); }
-    function targetCount(g) { return Math.max(g.MIN_COUNT, Math.round(g.FULL_COUNT * screenShare())); }
+    function targetCount(g) { return Math.round(Math.max(g.MIN_COUNT, g.FULL_COUNT * screenShare()) * AMOUNT); }
     const regular = g => g.list.filter(o => !o.once);   // Impulse Burst extras don't count toward the target
 
     // Add any that are missing right away; remove extras only while they're invisible, so nothing pops off screen
