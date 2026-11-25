@@ -36,6 +36,11 @@ body{background:var(--paper);color:var(--ink);font-family:var(--font-link);margi
   border:0.5px solid var(--line);border-radius:8px;padding:7px 12px;font:inherit;font-size:15px;cursor:pointer}
 #tidy:hover{background:var(--hover)}
 #tidy:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+#pager{position:absolute;top:10px;z-index:5;display:flex;gap:6px}
+.pg{min-width:36px;height:36px;padding:0 10px;background:var(--paper);color:var(--ink);border:0.5px solid var(--line);border-radius:8px;font:inherit;font-size:15px;cursor:pointer;font-variant-numeric:tabular-nums}
+.pg:hover{background:var(--hover)}
+.pg[aria-current="page"]{border-color:var(--accent);color:var(--accent);font-weight:700}
+.pg:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 </style>
 </head>
 <body>
@@ -46,6 +51,7 @@ body{background:var(--paper);color:var(--ink);font-family:var(--font-link);margi
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h7M4 12h7M4 18h7M14 6h6M14 12h6M14 18h6"/></svg>
     <span>Align</span>
   </button>
+  <div id="pager" role="navigation" aria-label="Pages of titles" hidden></div>
 </div>
 
 <script>
@@ -63,6 +69,7 @@ const SORT_AZ=true;    /* true = alphabetical by title; false = keep the order a
 const DRIFT=0.188;     /* link drift speed (1 = original speed) */
 const ROW_SPACING=50;  /* pixels from one link to the next, top to bottom, when lined up */
 const COL_GAP=48;      /* pixels between columns */
+const FONT_MIN=14;     /* smallest title size (px) before titles are split onto pages */
 const ONE_COL_MAX=8;   /* this many links or fewer line up in a single column */
 const SOLO_FIRST=4;             /* first projectile within this many seconds */
 const SOLO_MIN=10,SOLO_MAX=15;  /* seconds between projectiles after that */
@@ -97,23 +104,65 @@ const items=ordered.map(([t,slug],i)=>{
  return it;
 });
 function measure(){items.forEach(it=>{it.w=it.a.offsetWidth;it.h=it.a.offsetHeight})}
+/* Layout when lined up. Each column is only as wide as its longest title, with a modest gap, and the block is centered.
+   It tries these in order, stopping at the first that fits every title on screen:
+   1. Full-size titles, rows from ROW_SPACING apart down to 42px apart, adding columns (up to 5) only when the rows don't fit.
+   2. Smaller titles, one pixel at a time down to FONT_MIN, again adding columns as needed.
+   3. At FONT_MIN, rows close up until the hover boxes touch.
+   4. Pages: the titles are split into pages, with numbered buttons at the top right. */
+const pager=document.getElementById('pager');
+let FONT_MAX=0,page=0,pages=1,pagerCount=0;
+const startCols=()=>items.length<=ONE_COL_MAX?1:2;
+function setFontSize(fs){items.forEach(it=>{it.a.style.fontSize=fs+'px'})}
 function homes(){
- /* Each column is only as wide as its longest title, with a modest gap, and the block is centered */
- /* A short list is one column; a longer list uses as few columns as fit, adding one only when the rows no longer fit top to bottom */
- const n=items.length,GAP=COL_GAP,ROWMIN=42,availH=H-90;
- const fit=c=>{const rows=Math.ceil(n/c),cw=[];for(let k=0;k<c;k++){const col=items.slice(k*rows,(k+1)*rows);cw.push(col.length?Math.max(...col.map(i=>i.w)):0)}
-  return {cols:c,rows,cw,total:cw.reduce((a,b)=>a+b,0)+GAP*(c-1)}};
- let L=null;
- for(let c=n<=ONE_COL_MAX?1:2;c<=5;c++){const f=fit(c);if(f.total>W-24)break;L=f;if(f.rows*ROWMIN<=availH)break}
- if(!L)L=fit(1);
- const {rows,cw,total}=L;
- const rowH=Math.max(ROWMIN,Math.min(ROW_SPACING,availH/rows));
- let x=Math.max(8,(W-total)/2);const xs=cw.map(w=>{const v=x;x+=w+GAP;return v});
- /* Vertical placement: the middle of the block sits one third of the way down the box. A block too tall for that keeps its
-    top margin and grows downward, so a list that fills the box ends up centered top to bottom */
- const TOP=54,BOTTOM=36,blockH=(rows-1)*rowH+(items[0]?items[0].h:0);
- const y0=Math.max(TOP,Math.min(H/3-blockH/2,H-BOTTOM-blockH));
- items.forEach((it,i)=>{const c=Math.floor(i/rows),r=i%rows;it.hx=xs[c];it.hy=y0+r*rowH});
+ const n=items.length;if(!n)return;
+ const GAP=COL_GAP,ROWMIN=42,availH=H-90,TOP=54,BOTTOM=36;
+ if(!FONT_MAX)FONT_MAX=parseFloat(getComputedStyle(items[0].a).fontSize)||18;
+ const fit=(list,c)=>{const rows=Math.ceil(list.length/c),cw=[];for(let k=0;k<c;k++){const col=list.slice(k*rows,(k+1)*rows);cw.push(col.length?Math.max(...col.map(i=>i.w)):0)}
+  return {cols:c,rows,cw,total:cw.reduce((x,y)=>x+y,0)+GAP*(c-1)}};
+ const tryFit=minGap=>{const h=items[0].h,minPitch=h+minGap;let L=null;
+  for(let c=startCols();c<=5;c++){const f=fit(items,c);if(f.total>W-24)break;L=f;if((f.rows-1)*minPitch+h<=availH)return {L,minPitch}}
+  if(!L){L=fit(items,1);if((L.rows-1)*minPitch+h<=availH)return {L,minPitch}}
+  return null};
+ const place1=(list,L,minPitch)=>{const h=items[0].h,{rows,cw,total}=L;
+  const rowH=Math.max(minPitch,Math.min(ROW_SPACING,rows>1?(availH-h)/(rows-1):ROW_SPACING));
+  let x=Math.max(8,(W-total)/2);const xs=cw.map(w=>{const v=x;x+=w+GAP;return v});
+  /* The middle of the block sits one third of the way down; a taller block keeps its top margin and grows downward */
+  const blockH=(rows-1)*rowH+h,y0=Math.max(TOP,Math.min(H/3-blockH/2,H-BOTTOM-blockH));
+  list.forEach((it,i)=>{const c=Math.floor(i/rows),r=i%rows;it.hx=xs[c];it.hy=y0+r*rowH})};
+
+ let fs=FONT_MAX;setFontSize(fs);measure();
+ const minGap=Math.max(0,ROWMIN-items[0].h);
+ let r=tryFit(minGap);
+ while(!r&&fs>FONT_MIN){fs=Math.max(FONT_MIN,fs-1);setFontSize(fs);measure();r=tryFit(minGap)}
+ if(!r)r=tryFit(0);
+ if(r){pages=1;items.forEach(it=>{it.page=0});place1(items,r.L,r.minPitch)}
+ else{
+  const h=items[0].h,rowsPer=Math.max(1,Math.floor((availH-h)/h)+1);
+  let cols=1;
+  for(let c=5;c>=1;c--){const per=rowsPer*c;let ok=true;
+   for(let p=0;p*per<n;p++){if(fit(items.slice(p*per,(p+1)*per),c).total>W-24){ok=false;break}}
+   if(ok){cols=c;break}}
+  const per=rowsPer*cols;pages=Math.ceil(n/per);
+  for(let p=0;p<pages;p++){const list=items.slice(p*per,(p+1)*per);list.forEach(it=>{it.page=p});place1(list,fit(list,cols),h)}
+ }
+ page=Math.min(page,pages-1);
+ showPage(false);
+}
+function showPage(jump){
+ for(const it of items){
+  const off=it.page!==page;
+  if(off!==it.off&&!off&&jump){it.x=it.hx;it.y=it.hy}
+  it.off=off;it.a.style.visibility=off?'hidden':'';it.a.tabIndex=off?-1:0;
+ }
+ if(pages!==pagerCount){
+  pagerCount=pages;pager.innerHTML='';
+  if(pages>1)for(let p=0;p<pages;p++){const bt=document.createElement('button');bt.className='pg';bt.textContent=p+1;bt.setAttribute('aria-label','Page '+(p+1));
+   bt.addEventListener('click',()=>{page=p;showPage(true)});pager.appendChild(bt)}
+ }
+ pager.hidden=pages<2;
+ pager.style.right=(tidyBtn.offsetWidth+18)+'px';
+ [...pager.children].forEach((bt,p)=>{if(p===page)bt.setAttribute('aria-current','page');else bt.removeAttribute('aria-current')});
 }
 function size(){
  W=stage.clientWidth;H=stage.clientHeight;cv.width=Math.round(W*dpr);cv.height=Math.round(H*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);
@@ -131,9 +180,10 @@ tidyBtn.addEventListener('click',()=>{tidy=!tidy;tidyBtn.setAttribute('aria-pres
 
 function moveLinks(dt){
  const ramp=Math.max(0,Math.min(1,(T-HOLD)/4));
- const b=tidyBtn.getBoundingClientRect(),s=stage.getBoundingClientRect();
- const bx=b.left-s.left-6,by=b.top-s.top-6,bw=b.width+12,bh=b.height+12;
+ const s=stage.getBoundingClientRect();
+ const obs=[tidyBtn].concat(pages>1?[pager]:[]).map(el=>{const b=el.getBoundingClientRect();return [b.left-s.left-6,b.top-s.top-6,b.width+12,b.height+12]});
  for(const it of items){
+  if(it.off)continue;
   if(tidy||T<HOLD){const k=Math.min(1,dt*2.2);it.x+=(it.hx-it.x)*k;it.y+=(it.hy-it.y)*k;continue}
   if(it.held)continue;
   it.ang+=(Math.random()-0.5)*0.5*dt;
@@ -141,13 +191,16 @@ function moveLinks(dt){
   const mx=Math.max(8,W-it.w-8),my=Math.max(8,H-it.h-8);
   if(it.x<8){it.x=8;it.ang=Math.PI-it.ang}if(it.x>mx){it.x=mx;it.ang=Math.PI-it.ang}
   if(it.y<8){it.y=8;it.ang=-it.ang}if(it.y>my){it.y=my;it.ang=-it.ang}
-  const ox=Math.min(it.x+it.w,bx+bw)-Math.max(it.x,bx),oy=Math.min(it.y+it.h,by+bh)-Math.max(it.y,by);
-  if(ox>0&&oy>0){if(oy<ox){it.y=it.y<by?by-it.h:by+bh;it.ang=-it.ang}else{it.x=it.x<bx?bx-it.w:bx+bw;it.ang=Math.PI-it.ang}}
+  for(const [bx,by,bw,bh] of obs){
+   const ox=Math.min(it.x+it.w,bx+bw)-Math.max(it.x,bx),oy=Math.min(it.y+it.h,by+bh)-Math.max(it.y,by);
+   if(ox>0&&oy>0){if(oy<ox){it.y=it.y<by?by-it.h:by+bh;it.ang=-it.ang}else{it.x=it.x<bx?bx-it.w:bx+bw;it.ang=Math.PI-it.ang}}
+  }
  }
  if(!tidy&&T>=HOLD){
   const pad=6,push=30*dt;
   for(let i=0;i<items.length;i++)for(let j=i+1;j<items.length;j++){
    const p=items[i],q=items[j];
+   if(p.off||q.off)continue;
    const ox=Math.min(p.x+p.w,q.x+q.w)+pad-Math.max(p.x,q.x),oy=Math.min(p.y+p.h,q.y+q.h)+pad-Math.max(p.y,q.y);
    if(ox>0&&oy>0){
     if(oy<ox){const d=Math.min(oy/2,push),sg=p.y<q.y?-1:1;if(!p.held)p.y+=sg*d;if(!q.held)q.y-=sg*d;
