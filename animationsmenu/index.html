@@ -37,7 +37,7 @@ body{background:var(--paper);color:var(--ink);font-family:var(--font-link);margi
 #tidy:hover{background:var(--hover)}
 #tidy:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 #pager{position:absolute;top:10px;z-index:5;display:flex;gap:6px}
-.pg{min-width:36px;height:36px;padding:0 10px;background:var(--paper);color:var(--ink);border:0.5px solid var(--line);border-radius:8px;font:inherit;font-size:15px;cursor:pointer;font-variant-numeric:tabular-nums}
+.pg{min-width:36px;height:36px;padding:0 10px;background:var(--paper);color:var(--ink);border:0.5px solid var(--line);border-radius:8px;font:inherit;font-size:15px;cursor:pointer;font-variant-numeric:tabular-nums;text-align:center;white-space:nowrap}
 .pg:hover{background:var(--hover)}
 .pg[aria-current="page"]{border-color:var(--accent);color:var(--accent);font-weight:700}
 .pg:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
@@ -126,7 +126,8 @@ function measure(){items.forEach(it=>{it.w=it.a.offsetWidth;it.h=it.a.offsetHeig
    1. Rows from ROW_SPACING apart down to 42px apart, adding columns (up to 5) only when the rows don't fit.
       A column that is a little too wide to fit across is allowed if the gap between columns shrinks to no less than COL_GAP_MIN.
    2. Rows closer still, until the title boxes are GAP_MIN apart.
-   3. Pages: the titles are split into pages, and one button at the top right shows the next page (e.g. "More titles: G–N").
+   3. Pages: the titles are split into pages, and one fixed-size button at the top right, labeled with the page being shown
+      ("More Titles (1)", "More Titles (2)", ...), moves to the next page and, from the last page, back to the first.
    A title wider than the box wraps onto a second line, so rows can differ in height; each row is as tall as its tallest title. */
 const pager=document.getElementById('pager');
 let page=0,pages=1;
@@ -176,16 +177,6 @@ function homes(){
  page=Math.min(page,pages-1);
  showPage(false);
 }
-function titleKey(it){
- const all=items.map(i=>i.a.textContent);let pre=all[0]||'';
- for(const t of all)while(pre&&!t.startsWith(pre))pre=pre.slice(0,-1);
- pre=pre.slice(0,pre.lastIndexOf(' ')+1);
- return (it.a.textContent.slice(pre.length).trim()[0]||'').toUpperCase();
-}
-function pageRange(p){
- const list=items.filter(i=>i.page===p);if(!list.length)return '';
- const a=titleKey(list[0]),b=titleKey(list[list.length-1]);return a===b?a:a+'\u2013'+b;
-}
 function showPage(jump){
  for(const it of items){
   const off=it.page!==page;
@@ -194,9 +185,12 @@ function showPage(jump){
  }
  pager.hidden=pages<2;
  if(pages>1){
-  const next=(page+1)%pages,label=next?'More titles: '+pageRange(next)+' \u203a':'Back to '+pageRange(0);
   if(!pager.firstChild){const bt=document.createElement('button');bt.className='pg';bt.addEventListener('click',()=>{page=(page+1)%pages;showPage(true)});pager.appendChild(bt)}
-  pager.firstChild.textContent=label;pager.firstChild.setAttribute('aria-label',label+' (showing '+pageRange(page)+')');
+  const bt=pager.firstChild;
+  /* Fixed width: sized once for the widest label ("More Titles (N)" for the last page), so it never changes as you click */
+  if(+bt.dataset.sizedFor!==pages){bt.style.width='';bt.textContent='More Titles ('+pages+')';bt.style.width=bt.offsetWidth+'px';bt.dataset.sizedFor=pages}
+  bt.textContent='More Titles ('+(page+1)+')';
+  bt.setAttribute('aria-label','More titles: showing page '+(page+1)+' of '+pages+'. Go to page '+((page+1)%pages+1)+'.');
  }
  pager.style.right=(tidyBtn.offsetWidth+18)+'px';
 }
