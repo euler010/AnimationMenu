@@ -26,7 +26,7 @@ body{background:var(--paper);color:var(--ink);font-family:var(--font-link);margi
 #cv{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 #layer{position:absolute;inset:0}
 .lk{position:absolute;left:0;top:0;display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:8px;
-  color:var(--ink);text-decoration:none;font-size:18px;font-weight:500;white-space:nowrap;will-change:transform;
+  color:var(--ink);text-decoration:none;font-size:18px;font-weight:500;white-space:normal;max-width:calc(100% - 24px);box-sizing:border-box;will-change:transform;
   text-shadow:0 0 4px var(--paper),0 0 8px var(--paper),0 0 2px var(--paper);border:0.5px solid transparent;transition:background .2s,border-color .2s}
 .lk svg{flex:none;opacity:0.8;transition:transform .6s}
 .lk:hover,.lk:focus-visible{background:var(--paper);border-color:var(--line);outline:none;box-shadow:0 4px 14px rgba(40,40,110,0.10)}
@@ -104,39 +104,48 @@ function measure(){items.forEach(it=>{it.w=it.a.offsetWidth;it.h=it.a.offsetHeig
    Titles always stay full size. It tries these in order, stopping at the first that fits every title on screen:
    1. Rows from ROW_SPACING apart down to 42px apart, adding columns (up to 5) only when the rows don't fit.
    2. Rows closer still, until the title boxes are GAP_MIN apart.
-   3. Pages: the titles are split into pages, and one button at the top right shows the next page (e.g. "More titles: G–N"). */
+   3. Pages: the titles are split into pages, and one button at the top right shows the next page (e.g. "More titles: G–N").
+   A title wider than the box wraps onto a second line, so rows can differ in height; each row is as tall as its tallest title. */
 const pager=document.getElementById('pager');
 let page=0,pages=1;
 const startCols=()=>items.length<=ONE_COL_MAX?1:2;
 function homes(){
  const n=items.length;if(!n)return;
  const GAP=COL_GAP,ROWMIN=42,availH=H-90,TOP=54,BOTTOM=36;
- const fit=(list,c)=>{const rows=Math.ceil(list.length/c),cw=[];for(let k=0;k<c;k++){const col=list.slice(k*rows,(k+1)*rows);cw.push(col.length?Math.max(...col.map(i=>i.w)):0)}
-  return {cols:c,rows,cw,total:cw.reduce((x,y)=>x+y,0)+GAP*(c-1)}};
- const tryFit=minGap=>{const h=items[0].h,minPitch=h+minGap;let L=null;
-  for(let c=startCols();c<=5;c++){const f=fit(items,c);if(f.total>W-24)break;L=f;if((f.rows-1)*minPitch+h<=availH)return {L,minPitch}}
-  if(!L){L=fit(items,1);if((L.rows-1)*minPitch+h<=availH)return {L,minPitch}}
-  return null};
- const place1=(list,L,minPitch)=>{const h=items[0].h,{rows,cw,total}=L;
-  const rowH=Math.max(minPitch,Math.min(ROW_SPACING,rows>1?(availH-h)/(rows-1):ROW_SPACING));
-  let x=Math.max(8,(W-total)/2);const xs=cw.map(w=>{const v=x;x+=w+GAP;return v});
-  /* The middle of the block sits one third of the way down; a taller block keeps its top margin and grows downward */
-  const blockH=(rows-1)*rowH+h,y0=Math.max(TOP,Math.min(H/3-blockH/2,H-BOTTOM-blockH));
-  list.forEach((it,i)=>{const c=Math.floor(i/rows),r=i%rows;it.hx=xs[c];it.hy=y0+r*rowH})};
-
  measure();
- const minGap=Math.max(GAP_MIN,ROWMIN-items[0].h);
- let r=tryFit(minGap);
- if(!r)r=tryFit(GAP_MIN);
- if(r){pages=1;items.forEach(it=>{it.page=0});place1(items,r.L,r.minPitch)}
+ const h1=Math.min(...items.map(i=>i.h));               /* height of a one-line title box */
+ const gapNormal=Math.max(GAP_MIN,ROW_SPACING-h1),gapMin=Math.max(GAP_MIN,ROWMIN-h1);
+ /* Columns filled top to bottom; each row is as tall as its tallest title */
+ const grid=(list,c)=>{const rows=Math.ceil(list.length/c),cols=[];for(let k=0;k<c;k++){const col=list.slice(k*rows,(k+1)*rows);if(col.length)cols.push(col)}
+  const rh=[];for(let r=0;r<rows;r++)rh.push(Math.max(...cols.filter(col=>col[r]).map(col=>col[r].h)));
+  const cw=cols.map(col=>Math.max(...col.map(i=>i.w)));
+  return {cols,rows,rh,cw,width:cw.reduce((x,y)=>x+y,0)+GAP*(cols.length-1),sumH:rh.reduce((x,y)=>x+y,0)}};
+ const height=(G,g)=>G.sumH+g*(G.rows-1);
+ const tryFit=g=>{let last=null;
+  for(let c=startCols();c<=5;c++){const G=grid(items,c);if(G.width>W-24)break;last=G;if(height(G,g)<=availH)return G}
+  if(!last){const G=grid(items,1);if(height(G,g)<=availH)return G}
+  return null};
+ const placeGrid=(G,gmin)=>{
+  let g=gapNormal;if(G.rows>1)g=Math.min(gapNormal,Math.max(gmin,(availH-G.sumH)/(G.rows-1)));
+  let x=Math.max(8,(W-G.width)/2);const xs=G.cw.map(w=>{const v=x;x+=w+GAP;return v});
+  /* The middle of the block sits one third of the way down; a taller block keeps its top margin and grows downward */
+  const blockH=height(G,g),y0=Math.max(TOP,Math.min(H/3-blockH/2,H-BOTTOM-blockH));
+  const ys=[];let y=y0;G.rh.forEach(h=>{ys.push(y);y+=h+g});
+  G.cols.forEach((col,c)=>col.forEach((it,r)=>{it.hx=xs[c];it.hy=ys[r]}))};
+
+ let G=tryFit(gapMin),gmin=gapMin;
+ if(!G){G=tryFit(GAP_MIN);gmin=GAP_MIN}
+ if(G){pages=1;items.forEach(it=>{it.page=0});placeGrid(G,gmin)}
  else{
-  const h=items[0].h,pitch=h+GAP_MIN,rowsPer=Math.max(1,Math.floor((availH-h)/pitch)+1);
-  let cols=1;
-  for(let c=5;c>=1;c--){const per=rowsPer*c;let ok=true;
-   for(let p=0;p*per<n;p++){if(fit(items.slice(p*per,(p+1)*per),c).total>W-24){ok=false;break}}
-   if(ok){cols=c;break}}
-  const per=rowsPer*cols;pages=Math.ceil(n/per);
-  for(let p=0;p<pages;p++){const list=items.slice(p*per,(p+1)*per);list.forEach(it=>{it.page=p});place1(list,fit(list,cols),pitch)}
+  /* Pages: the most titles per page (columns x rows) for which every page fits */
+  const Rmax=Math.max(1,Math.floor((availH-h1)/(h1+GAP_MIN))+1);let best={c:1,R:1};
+  for(let c=5;c>=1;c--)for(let R=Rmax;R>=1;R--){
+   if(c*R<=best.c*best.R)break;
+   const per=c*R;let ok=true;
+   for(let p=0;p*per<n&&ok;p++){const Gp=grid(items.slice(p*per,(p+1)*per),c);if(Gp.width>W-24||height(Gp,GAP_MIN)>availH)ok=false}
+   if(ok){best={c,R};break}}
+  const per=best.c*best.R;pages=Math.ceil(n/per);
+  for(let p=0;p<pages;p++){const list=items.slice(p*per,(p+1)*per);list.forEach(it=>{it.page=p});placeGrid(grid(list,best.c),GAP_MIN)}
  }
  page=Math.min(page,pages-1);
  showPage(false);
