@@ -65,6 +65,7 @@ const SORT_AZ=true;    /* true = alphabetical by title; false = keep the order a
 const DRIFT=0.188;     /* link drift speed (1 = original speed) */
 const ROW_SPACING=50;  /* pixels from one link to the next, top to bottom, when lined up */
 const COL_GAP=48;      /* pixels between columns */
+const COL_GAP_MIN=16;  /* columns may close up to this gap when that lets one more column fit */
 const GAP_MIN=2;       /* smallest space (px) between title boxes before titles go onto pages */
 const ONE_COL_MAX=8;   /* this many links or fewer line up in a single column */
 const SOLO_FIRST=4;             /* first edge-to-edge sketch (projectile or motion diagram) within this many seconds */
@@ -103,6 +104,7 @@ function measure(){items.forEach(it=>{it.w=it.a.offsetWidth;it.h=it.a.offsetHeig
 /* Layout when lined up. Each column is only as wide as its longest title, with a modest gap, and the block is centered.
    Titles always stay full size. It tries these in order, stopping at the first that fits every title on screen:
    1. Rows from ROW_SPACING apart down to 42px apart, adding columns (up to 5) only when the rows don't fit.
+      A column that is a little too wide to fit across is allowed if the gap between columns shrinks to no less than COL_GAP_MIN.
    2. Rows closer still, until the title boxes are GAP_MIN apart.
    3. Pages: the titles are split into pages, and one button at the top right shows the next page (e.g. "More titles: G–N").
    A title wider than the box wraps onto a second line, so rows can differ in height; each row is as tall as its tallest title. */
@@ -119,15 +121,19 @@ function homes(){
  const grid=(list,c)=>{const rows=Math.ceil(list.length/c),cols=[];for(let k=0;k<c;k++){const col=list.slice(k*rows,(k+1)*rows);if(col.length)cols.push(col)}
   const rh=[];for(let r=0;r<rows;r++)rh.push(Math.max(...cols.filter(col=>col[r]).map(col=>col[r].h)));
   const cw=cols.map(col=>Math.max(...col.map(i=>i.w)));
-  return {cols,rows,rh,cw,width:cw.reduce((x,y)=>x+y,0)+GAP*(cols.length-1),sumH:rh.reduce((x,y)=>x+y,0)}};
+  return {cols,rows,rh,cw,gap:GAP,width:cw.reduce((x,y)=>x+y,0)+GAP*(cols.length-1),sumH:rh.reduce((x,y)=>x+y,0)}};
+ /* Fits across the box? If not, close the column gap (down to COL_GAP_MIN) when that is enough */
+ const fitsAcross=G=>{if(G.width<=W-24)return true;if(G.cols.length<2)return false;
+  const sum=G.cw.reduce((x,y)=>x+y,0),g=(W-24-sum)/(G.cols.length-1);
+  if(g<COL_GAP_MIN)return false;G.gap=g;G.width=sum+g*(G.cols.length-1);return true};
  const height=(G,g)=>G.sumH+g*(G.rows-1);
  const tryFit=g=>{let last=null;
-  for(let c=startCols();c<=5;c++){const G=grid(items,c);if(G.width>W-24)break;last=G;if(height(G,g)<=availH)return G}
+  for(let c=startCols();c<=5;c++){const G=grid(items,c);if(!fitsAcross(G))break;last=G;if(height(G,g)<=availH)return G}
   if(!last){const G=grid(items,1);if(height(G,g)<=availH)return G}
   return null};
  const placeGrid=(G,gmin)=>{
   let g=gapNormal;if(G.rows>1)g=Math.min(gapNormal,Math.max(gmin,(availH-G.sumH)/(G.rows-1)));
-  let x=Math.max(8,(W-G.width)/2);const xs=G.cw.map(w=>{const v=x;x+=w+GAP;return v});
+  let x=Math.max(8,(W-G.width)/2);const xs=G.cw.map(w=>{const v=x;x+=w+G.gap;return v});
   /* The middle of the block sits one third of the way down; a taller block keeps its top margin and grows downward */
   const blockH=height(G,g),y0=Math.max(TOP,Math.min(H/3-blockH/2,H-BOTTOM-blockH));
   const ys=[];let y=y0;G.rh.forEach(h=>{ys.push(y);y+=h+g});
@@ -142,10 +148,10 @@ function homes(){
   for(let c=5;c>=1;c--)for(let R=Rmax;R>=1;R--){
    if(c*R<=best.c*best.R)break;
    const per=c*R;let ok=true;
-   for(let p=0;p*per<n&&ok;p++){const Gp=grid(items.slice(p*per,(p+1)*per),c);if(Gp.width>W-24||height(Gp,GAP_MIN)>availH)ok=false}
+   for(let p=0;p*per<n&&ok;p++){const Gp=grid(items.slice(p*per,(p+1)*per),c);if(!fitsAcross(Gp)||height(Gp,GAP_MIN)>availH)ok=false}
    if(ok){best={c,R};break}}
   const per=best.c*best.R;pages=Math.ceil(n/per);
-  for(let p=0;p<pages;p++){const list=items.slice(p*per,(p+1)*per);list.forEach(it=>{it.page=p});placeGrid(grid(list,best.c),GAP_MIN)}
+  for(let p=0;p<pages;p++){const list=items.slice(p*per,(p+1)*per);list.forEach(it=>{it.page=p});const Gp=grid(list,best.c);fitsAcross(Gp);placeGrid(Gp,GAP_MIN)}
  }
  page=Math.min(page,pages-1);
  showPage(false);
